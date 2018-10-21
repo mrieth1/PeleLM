@@ -27,12 +27,14 @@
 
     <!-- Header -->
     <header id="header">
-      <h1><a href="index.html">PeleLM - Under construction!!</a></h1>
+      <h1><a href="index.html">Home</a></h1>
       <nav id="nav">
 	<ul>
-	  <li><a href="gallery.html">Gallery</a></li>
-	  <li><a href="overview.html">Overview</a></li>
-	  <li><a href="help.html" class="button special">Get Help</a></li>
+	  <li>
+            <a href="overview.html" class="button special">Overview</a>
+            <a href="gallery.html" class="button special">Gallery</a>
+            <a href="help.html" class="button special">Get Help</a>
+          </li>
 	</ul>
       </nav>
     </header>
@@ -49,19 +51,11 @@
 
 		<li><center><h3>PeleLM at a Glance</h3></center>
 		  PeleLM is a parallel, adaptive mesh refinement (AMR) code that solves the 
-                  variable-density incompressible Navier-Stokes equations.</li>
+                  reacting Navier-Stokes equations in the low Mach number regime.</li>
 
                 <li>The core libraries for managing the subcycling AMR grids and 
                   communication are found in the 
                   <a href="https://amrex-codes.github.io/amrex/">AMReX source code.</a></li>
-
-                <li>The algorithm is described in the following paper (and references therein):</li>
-
-                <li>
-                  <b>A Conservative Adaptive Projection Method for the Variable Density Incompressible Navier-Stokes 
-                  Equations, A. S. Almgren, et al., J. Comp. Phys., 142, pp. 1-46, 1998.</b>
-                </li>
-
                 <li><center><h3>Features</h3></center>
                        <ul>
                          <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
@@ -69,11 +63,11 @@
                          <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
                            Two- and Three- dimensional support</li>
                          <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
+                           Combustion (transport, kinetics, thermodynamics) models based on CHEMKIN and EGLib</li>
+                         <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
                            Optional subcycling in time</li>
                          <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
-                           Support for particles</li>
-                         <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
-                           Support for particles</li>
+                           Support for tracer particles and transported scalars</li>
                          <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
                            Parallelization via flat MPI, OpenMP, hybrid MPI/OpenMP, or MPI/MPI</li>
                          <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
@@ -85,11 +79,13 @@
                            <a href="https://wci.llnl.gov/simulation/computer-codes/visit/">VisIt</a>,
                            and <a href="https://www.paraview.org/">ParaView</a>.</li>
                          <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
-                           Second-order projection methodology for enforcing the incompressibility constraint</li>
+                           Second-order projection methodology for enforcing the low Mach number constraint</li>
+                         <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
+                           Time advance based on a spectral-deferred corrections approach that conserves species mass and energy and evolves on the equation of state</li>
                          <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
                            Several higher-order Godunov integration schemes for advection</li>
                          <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
-                           Implicit viscosity</li>
+                           Temporally implicit viscosity, species mass diffusion, thermal conductivity, chemical kinetics</li>
                          <li style="margin-bottom: -15px; margin-left:20px; LINE-HEIGHT:25px">
                            Built-in profiling tools</li>
                        </ul>
@@ -112,7 +108,7 @@
 
                 <li><center><h3>Getting Help</h3></center>
                   To obtain help, simply post an issue on the 
-                  <a href="https://github.com/AMReX-Codes/PeleLM">PeleLM GitHub webpage</a>
+                  <a href="https://github.com/AMReX-Combustion/PeleLM">PeleLM GitHub webpage</a>
                 </li>
               </ul>
             </section>
@@ -137,7 +133,7 @@
                 </center>
                 
                 Depicted above is a Kelvin-Helmholtz instability using 3 total levels of 
-                refinement generated with the <b>PeleLM</b> code.
+                refinement demosntrating solution-adaptive mesh refinement.
                 <p><p>
                 
               <header class="major">
