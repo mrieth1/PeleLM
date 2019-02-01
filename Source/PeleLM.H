@@ -486,6 +486,13 @@ private:
   static std::map<std::string,amrex::Real> typical_values_FileVals;
   static int         sdc_iterMAX;
   static int         num_mac_sync_iter;
+
+  static int  cvode_meth;
+  static int  cvode_itmeth;
+  static int  cvode_iJac;
+  static int  cvode_iE;
+  static int  cvode_iDense;
+  static int  ncells_packing;
     
   static int nGrowAdvForcing;
 };

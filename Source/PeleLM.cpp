@@ -41,6 +41,9 @@
 
 #include <AMReX_buildInfo.H>
 
+#include <actual_Creactor.h>
+#include <AMReX_MultiFab.H>
+
 using namespace amrex;
 
 static Box stripBox; // used for debugging
@@ -152,6 +155,12 @@ Real PeleLM::P1atm_MKS;
 bool PeleLM::plot_reactions;
 bool PeleLM::plot_consumption;
 bool PeleLM::plot_heat_release;
+int  PeleLM::cvode_meth;
+int  PeleLM::cvode_itmeth;
+int  PeleLM::cvode_iJac;
+int  PeleLM::cvode_iE;
+int  PeleLM::cvode_iDense;
+int  PeleLM::ncells_packing;
 static bool plot_rhoydot;
 Real PeleLM::new_T_threshold;
 int  PeleLM::nGrowAdvForcing=1;
@@ -361,8 +370,21 @@ PeleLM::Initialize ()
 
   PeleLM::sdc_iterMAX               = 1;
   PeleLM::num_mac_sync_iter         = 1;
+  PeleLM::cvode_meth                = 2;
+  PeleLM::cvode_itmeth              = 2;
+  PeleLM::cvode_iJac                = 0;
+  PeleLM::cvode_iE                  = 2;
+  PeleLM::cvode_iDense              = 1;
+  PeleLM::ncells_packing            = 1;
 
   ParmParse pp("ns");
+
+  pp.query("cvode_meth",cvode_meth);
+  pp.query("cvode_itmeth",cvode_itmeth);
+  pp.query("cvode_iJac",cvode_iJac);
+  pp.query("cvode_iE",cvode_iE);
+  pp.query("cvode_iDense",cvode_iDense);
+  pp.query("ncells_packing",ncells_packing);
 
   pp.query("do_diffuse_sync",do_diffuse_sync);
   BL_ASSERT(do_diffuse_sync == 0 || do_diffuse_sync == 1);
@@ -522,6 +544,14 @@ PeleLM::Initialize ()
   }
 
   amrex::ExecOnFinalize(PeleLM::Finalize);
+
+  //int cvode_meth = 2;
+  //int cvode_itmeth = 2;
+  //int cvode_iJac = 1;
+  //int cvode_iE = 2;
+  //int cvode_iDense = 1;
+  //int Ncells = 1;
+  extern_cInit(&cvode_meth,&cvode_itmeth,&cvode_iJac,&cvode_iE,&cvode_iDense,&ncells_packing);
 
   initialized = true;
 }
@@ -4179,7 +4209,6 @@ PeleLM::advance (Real time,
   const Real prev_time = state[State_Type].prevTime();
   const Real cur_time  = state[State_Type].curTime();
 
-
   Real dt_test = 0.0, dummy = 0.0;    
 
   BL_PROFILE_VAR("HT::advance::diffusion", HTDIFF);
@@ -5018,16 +5047,67 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       const FArrayBox& frc      = FTemp[Smfi];
       FArrayBox*       chemDiag = (do_diag ? &(diagTemp[Smfi]) : 0);
 
-      BoxArray ba = do_avg_down_chem ? amrex::complementIn(bx,cf_grids) : BoxArray(bx);
+      //BoxArray ba = do_avg_down_chem ? amrex::complementIn(bx,cf_grids) : BoxArray(bx);
 
-      for (int i = 0; i < ba.size(); ++i)
-      {
-        const int s_spec = 0, s_rhoh = nspecies, s_temp = nspecies+2;
+      //for (int i = 0; i < ba.size(); ++i)
+      //{
+      //  const int s_spec = 0, s_rhoh = nspecies, s_temp = nspecies+2;
 
-        getChemSolve().solveTransient_sdc(rYn,rHn,Tn,rYo,rHo,To,frc,fc,ba[i],
-                                          s_spec,s_rhoh,s_temp,dt,chemDiag,
-					  use_stiff_solver);
+      //  getChemSolve().solveTransient_sdc(rYn,rHn,Tn,rYo,rHo,To,frc,fc,ba[i],
+      //                                    s_spec,s_rhoh,s_temp,dt,chemDiag,
+      //  				  use_stiff_solver);
+      //}
+      // CVODE
+
+      //printf("number of cells in box ? %d %d \n", bx.size()[0], bx.size()[1]);
+      //printf("number of cells in box ? %ld \n",bx.numPts());
+
+      double fct_cnt;
+      Real dt_tmp = dt;
+      double time_init = 0.0;
+      double plo = 1013250.0;
+      int always_init = 1;
+      int counter = 0;
+      long int cells_in_box = bx.numPts();
+      int nb_of_iter = cells_in_box / ncells_packing; 
+      double tmp_vect[ncells_packing*(nspecies+1)];
+      double tmp_src_vect[ncells_packing*nspecies];
+      double tmp_vect_energy[ncells_packing*1];
+      double tmp_src_vect_energy[ncells_packing*1];
+      BoxIterator bit(bx);
+      BoxIterator bit2(bx);
+      bit.begin();
+      bit2.begin();
+      for (int kk=0;kk<nb_of_iter;kk++){
+          for (int jj=0;jj<ncells_packing;jj++){
+	      counter = counter + 1;
+	      for (int i=0;i<nspecies; i++){
+		      tmp_vect[jj*(nspecies+1) + i] = rYn(bit(),i) * 1.e-3;
+		      tmp_src_vect[jj*ncells_packing + i] = frc(bit(),i) * 1.e-3;
+	      }
+	      tmp_vect[jj*(nspecies+1) + nspecies] = rYn(bit(),nspecies+2);
+	      tmp_vect_energy[jj]     = rYn(bit(),nspecies) * 10.0; 
+	      tmp_src_vect_energy[jj] = frc(bit(),nspecies) * 10.0 ;  
+	      bit.next();
+	  }
+	  //fc(bit()) 
+          fct_cnt = actual_cReact(tmp_vect, tmp_src_vect, 
+	          tmp_vect_energy, tmp_src_vect_energy,
+	          &plo, &dt_tmp, &time_init, &always_init);
+          dt_tmp = dt;
+          for (int jj=0;jj<ncells_packing;jj++){
+	      for (int i=0;i<nspecies; i++){
+		      rYn(bit2(),i)  = tmp_vect[jj*(nspecies+1) + i] * 1.e+03;
+	      }
+	      rYn(bit2(),nspecies+2) = tmp_vect[jj*(nspecies+1) + nspecies];
+	      rYn(bit2(),nspecies)   = tmp_vect_energy[jj] * 1.0e-01; 
+	      bit2.next();
+	  }
       }
+      printf("How many boxes in this MD ? %ld %d \n", bx.numPts(), counter);
+      printf("How many boxes integrated in the same cvode loop ? %d\n", ncells_packing);
+      printf("How many cvode calls then ? %d\n", nb_of_iter);
+      //amrex::Abort("end test here");
     }
 
     FTemp.clear();
