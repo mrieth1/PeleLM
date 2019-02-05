@@ -4992,16 +4992,16 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
     const int Threshold = chem_box_chop_threshold * ParallelDescriptor::NProcs();
     BoxArray  ba        = mf_new.boxArray();
     //printf("number of boxes in the boxarray ba ? %d \n", ba.size());
-    printf(" Threshold %d \n", Threshold);
-    printf(" ba size ?? %ld \n",ba.size());
+    //printf(" Threshold %d \n", Threshold);
+    //printf(" ba size ?? %ld \n",ba.size());
     bool      done      = (ba.size() >= Threshold);
-    printf(done ? "true \n" : "false \n");
+    //printf(done ? "true \n" : "false \n");
 
     for (int cnt = 1; !done; cnt *= 2)
     {
       const IntVect ChunkSize = parent->maxGridSize(level)/cnt;
-      printf(" level  %d \n", level);
-      printf(" ChunkSize %d %d \n", ChunkSize[0], ChunkSize[1]);
+      //printf(" level  %d \n", level);
+      //printf(" ChunkSize %d %d \n", ChunkSize[0], ChunkSize[1]);
 
       if ( AMREX_D_TERM(ChunkSize[0] < 16, || ChunkSize[1] < 16, || ChunkSize[2] < 16) )
         //
@@ -5010,15 +5010,15 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
         break;
 
       IntVect chunk(ChunkSize);
-      printf(" chunk %d %d \n", chunk[0], chunk[1]);
+      //printf(" chunk %d %d \n", chunk[0], chunk[1]);
 
       for (int j = BL_SPACEDIM-1; j >=0 && ba.size() < Threshold; j--)
       {
-	printf("    dim ? %d \n",j);
+	//printf("    dim ? %d \n",j);
         chunk[j] /= 2;
-	printf("    -- chunk %d \n", chunk[j]);
+	//printf("    -- chunk %d \n", chunk[j]);
         ba.maxSize(chunk);
-	printf("    -- ba size ?? %ld \n",ba.size());
+	//printf("    -- ba size ?? %ld \n",ba.size());
         if (ba.size() >= Threshold) done = true;
       }
     }
@@ -5057,8 +5057,8 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       const FArrayBox& frc      = FTemp[Smfi];
       FArrayBox*       chemDiag = (do_diag ? &(diagTemp[Smfi]) : 0);
 
-      printf("How many cells in this box ? %ld \n", bx.numPts());
-      printf("number of cells in box ? %d %d \n", bx.size()[0], bx.size()[1]);
+      //printf("How many cells in this box ? %ld \n", bx.numPts());
+      //printf("number of cells in box ? %d %d \n", bx.size()[0], bx.size()[1]);
 
       // Try and chop FABarray in smaller pieces
       IArrayBox Id(bx,1);
@@ -5071,9 +5071,9 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       //for (int j = 0; j<BL_SPACEDIM; j++){
       //    size_id[j] = 4;
       //}
-      printf("Re chop the box... ");
+      //printf("Re chop the box... ");
       ba.maxSize(size_id);
-      printf("How many boxes in this new box array ? %ld \n", ba.size());
+      //printf("How many boxes in this new box array ? %ld \n", ba.size());
       for  (int i = 0; i < ba.size(); ++i) {
 	      Id.setVal(i,ba[i]);
       }
@@ -5108,11 +5108,11 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       // Initialize them
       bit.begin();
       bit2.begin();
-      printf("How many boxes integrated in the same cvode loop ? %d\n", ncells_packing);
-      printf("How many cvode calls then ? %d\n", nb_of_iter);
+      //printf("How many boxes integrated in the same cvode loop ? %d\n", ncells_packing);
+      //printf("How many cvode calls then ? %d\n", nb_of_iter);
       for (int kk=0;kk<nb_of_iter;kk++){
 	  // Work on first BoxIterator to fill tmp arrays 
-	  printf("  \n");
+	  //printf("  \n");
           for (int jj=0;jj<ncells_packing;jj++){
               //printf("  -- Id number ? %d \n", Id(bit()));
 	      for (int i=0;i<nspecies; i++){

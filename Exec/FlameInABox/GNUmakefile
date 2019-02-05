@@ -18,7 +18,8 @@ VERBOSE         = FALSE
 USE_CUDA        = FALSE
 
 USE_SUNDIALS_3x4x=TRUE
-CVODE_LIB_DIR = /home/amfelden/CODES/PeleLM/Source/ChemDriver/cvode-4.0.2/instdir/lib/
+#CVODE_LIB_DIR = /home/amfelden/CODES/PeleLM/Source/ChemDriver/cvode-4.0.2/instdir/lib/
+CVODE_LIB_DIR = /home/amfelden/CODES/PeleLM/Source/ChemDriver/cvode-4.0.0-development/instdir/lib/
 
 # Enable flctin namelist
 #USE_FLCTS       = TRUE
@@ -37,7 +38,7 @@ CVODE_LIB_DIR = /home/amfelden/CODES/PeleLM/Source/ChemDriver/cvode-4.0.2/instdi
 
 # Choose model (from list below), and pmf file
 Chemistry_Model = DRM19
-fEXE_sources += drm19Soln_seed_stoich.f
+fEXE_sources += DRM19_T298_Phi1.0_X.f
 #drm19Soln_seed_0.50.f
 
 #Chemistry_Model = LIDRYER

@@ -1,6 +1,5 @@
 #----------------------------TOP LEVEL INPUTS----------------------
-max_step  =  10000
-max_step  =  20
+max_step  =  1
 stop_time = 4.00
 
 #--------------------------MISC/UNSORTED INPUTS-----------------------------
@@ -44,7 +43,7 @@ cg.cg_solver=1
 #-------------------------AMR INPUTS----------------------------
 amr.n_cell    = 64 64 64
 amr.n_cell    = 128 128 128
-amr.n_cell    = 32 32 32
+amr.n_cell    = 32 128 32
 
 amr.v=1
 amr.max_level =  2            # maximum level number allowed
@@ -57,15 +56,15 @@ amr.blocking_factor = 16      # block factor in grid generation
 
 amr.checkpoint_files_output = 0
 amr.check_file      = chk     # root name of checkpoint file
-amr.check_int       = 5       # number of timesteps between checkpoints
+amr.check_int       = 20       # number of timesteps between checkpoints
 
 amr.plot_file       = plt
-amr.plot_int        = 500
+amr.plot_int        = 1
 #amr.derive_plot_vars=rhoRT mag_vort particle_count mean_progress_curvature
 amr.derive_plot_vars=rhoRT mag_vort avg_pressure gradpx gradpy diveru
 
 amr.grid_log        = grdlog  # name of grid logging file
-amr.max_grid_size   = 64
+amr.max_grid_size   = 16
 #amr.derive_plot_vars=ALL
 
 amr.probin_file = probin.3d.test # This will default to file "probin" if not set
@@ -107,9 +106,9 @@ ns.divu_ceiling = 1
 ns.divu_dt_factor = .4
 ns.min_rho_divu_ceiling = .01
 
-ns.fuelName        = H2
+ns.fuelName        = CH4
 ns.oxidizerName    = O2
-ns.flameTracName   = H
+ns.flameTracName   = CH3
 ns.unity_Le = 0
 
 ns.dpdt_option = 0
@@ -126,6 +125,9 @@ ns.lo_bc          = 0 5
 ns.hi_bc          = 0 2
 geometry.is_periodic = 1 0
 
+ns.ncells_packing  = 1
+ns.cvode_iJac = 0
+
 # >>>>>>>>>>>>>  BC FLAGS <<<<<<<<<<<<<<<<
 # 0 = Interior           3 = Symmetry
 # 1 = Inflow             4 = SlipWall
@@ -134,7 +136,7 @@ geometry.is_periodic = 1 0
 geometry.coord_sys = 0  # 0 => cart, 1 => RZ
 
 geometry.prob_lo   =  0. 0. 0.
-geometry.prob_hi   = .016 .016 .016
+geometry.prob_hi   = .016 .064 .016
 
 
 # ------------------  INPUTS TO GODUNOV CLASS ----------------------
@@ -174,3 +176,10 @@ mac.do_outflow_bcs = 0
 #   8BIT   (eight-bit run-length-encoded)
 #
 fab.format = NATIVE
+
+#ns.init_iter=0
+#ns.num_divu_iters=0
+#ns.hack_nochem=1
+#max_step=0
+#ns.do_init_proj=0
+#

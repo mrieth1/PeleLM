@@ -274,7 +274,7 @@ int actual_cReact(realtype *rY_in, realtype *rY_src_in,
 	    CVodeReInit(cvode_mem, time_init, y);
 	    InitPartial = false;
 	} else {
-	    temp_old = abs(rY_in[NEQ] - temp_old);
+	    temp_old = fabs(rY_in[NEQ] - temp_old);
 	    // Sloppy but I can't think of anything better now
             if (temp_old > 50.0) {
                 if (iverbose > 1) {
