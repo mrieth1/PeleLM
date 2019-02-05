@@ -15,6 +15,11 @@ USE_OMP         = FALSE
 PRECISION       = DOUBLE
 VERBOSE         = FALSE
 
+USE_CUDA        = FALSE
+
+USE_SUNDIALS_3x4x=TRUE
+CVODE_LIB_DIR = /home/amfelden/CODES/PeleLM/Source/ChemDriver/cvode-4.0.2/instdir/lib/
+
 # Enable flctin namelist
 #USE_FLCTS       = TRUE
 
@@ -32,7 +37,8 @@ VERBOSE         = FALSE
 
 # Choose model (from list below), and pmf file
 Chemistry_Model = DRM19
-fEXE_sources += drm19Soln_seed_0.50.f
+fEXE_sources += drm19Soln_seed_stoich.f
+#drm19Soln_seed_0.50.f
 
 #Chemistry_Model = LIDRYER
 #fEXE_sources += LiDryer_040_01ATM.f
@@ -45,12 +51,13 @@ fEXE_sources += drm19Soln_seed_0.50.f
 
 Blocs   := .
 
-CEXE_sources +=
+CEXE_sources += actual_Creactor.cpp 
 FEXE_sources += Prob_$(DIM)d.F Prob_F.F
 CEXE_headers += 
 FEXE_headers += probdata.H Prob_F.H
 
 include $(PELELM_HOME)/Tools/Make/Make.PeleLM
+include Make.CVODE
 # Available chemistry models:
 # CanuH2 chem-CH4-2step chem-H dme glar gri Hai H-CW header inert Konnov
 # LiDryer Marinov prf_ethanol Roehl sandiego smooke usc

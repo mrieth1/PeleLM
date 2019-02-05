@@ -4991,11 +4991,17 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
     //
     const int Threshold = chem_box_chop_threshold * ParallelDescriptor::NProcs();
     BoxArray  ba        = mf_new.boxArray();
+    //printf("number of boxes in the boxarray ba ? %d \n", ba.size());
+    printf(" Threshold %d \n", Threshold);
+    printf(" ba size ?? %ld \n",ba.size());
     bool      done      = (ba.size() >= Threshold);
+    printf(done ? "true \n" : "false \n");
 
     for (int cnt = 1; !done; cnt *= 2)
     {
       const IntVect ChunkSize = parent->maxGridSize(level)/cnt;
+      printf(" level  %d \n", level);
+      printf(" ChunkSize %d %d \n", ChunkSize[0], ChunkSize[1]);
 
       if ( AMREX_D_TERM(ChunkSize[0] < 16, || ChunkSize[1] < 16, || ChunkSize[2] < 16) )
         //
@@ -5004,11 +5010,15 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
         break;
 
       IntVect chunk(ChunkSize);
+      printf(" chunk %d %d \n", chunk[0], chunk[1]);
 
       for (int j = BL_SPACEDIM-1; j >=0 && ba.size() < Threshold; j--)
       {
+	printf("    dim ? %d \n",j);
         chunk[j] /= 2;
+	printf("    -- chunk %d \n", chunk[j]);
         ba.maxSize(chunk);
+	printf("    -- ba size ?? %ld \n",ba.size());
         if (ba.size() >= Threshold) done = true;
       }
     }
@@ -5047,6 +5057,27 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       const FArrayBox& frc      = FTemp[Smfi];
       FArrayBox*       chemDiag = (do_diag ? &(diagTemp[Smfi]) : 0);
 
+      printf("How many cells in this box ? %ld \n", bx.numPts());
+      printf("number of cells in box ? %d %d \n", bx.size()[0], bx.size()[1]);
+
+      // Try and chop FABarray in smaller pieces
+      IArrayBox Id(bx,1);
+      BoxArray ba(bx);
+      //Const Box&  bx_id = Id.box();
+      //BoxArray ba(bx_id);
+      IntVect size_id = parent->maxGridSize(level);
+      size_id[0] = ncells_packing;
+      size_id[1] = 2;
+      //for (int j = 0; j<BL_SPACEDIM; j++){
+      //    size_id[j] = 4;
+      //}
+      printf("Re chop the box... ");
+      ba.maxSize(size_id);
+      printf("How many boxes in this new box array ? %ld \n", ba.size());
+      for  (int i = 0; i < ba.size(); ++i) {
+	      Id.setVal(i,ba[i]);
+      }
+
       //BoxArray ba = do_avg_down_chem ? amrex::complementIn(bx,cf_grids) : BoxArray(bx);
 
       //for (int i = 0; i < ba.size(); ++i)
@@ -5059,56 +5090,58 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       //}
       // CVODE
 
-      //printf("number of cells in box ? %d %d \n", bx.size()[0], bx.size()[1]);
-      //printf("number of cells in box ? %ld \n",bx.numPts());
 
       double fct_cnt;
       Real dt_tmp = dt;
       double time_init = 0.0;
       double plo = 1013250.0;
-      int always_init = 1;
-      int counter = 0;
+      int always_init = 0;
       long int cells_in_box = bx.numPts();
       int nb_of_iter = cells_in_box / ncells_packing; 
       double tmp_vect[ncells_packing*(nspecies+1)];
       double tmp_src_vect[ncells_packing*nspecies];
       double tmp_vect_energy[ncells_packing*1];
       double tmp_src_vect_energy[ncells_packing*1];
+      // Define 2 bx iterators
       BoxIterator bit(bx);
       BoxIterator bit2(bx);
+      // Initialize them
       bit.begin();
       bit2.begin();
+      printf("How many boxes integrated in the same cvode loop ? %d\n", ncells_packing);
+      printf("How many cvode calls then ? %d\n", nb_of_iter);
       for (int kk=0;kk<nb_of_iter;kk++){
+	  // Work on first BoxIterator to fill tmp arrays 
+	  printf("  \n");
           for (int jj=0;jj<ncells_packing;jj++){
-	      counter = counter + 1;
+              //printf("  -- Id number ? %d \n", Id(bit()));
 	      for (int i=0;i<nspecies; i++){
 		      tmp_vect[jj*(nspecies+1) + i] = rYn(bit(),i) * 1.e-3;
-		      tmp_src_vect[jj*ncells_packing + i] = frc(bit(),i) * 1.e-3;
+		      tmp_src_vect[jj*nspecies + i] = frc(bit(),i) * 1.e-3;
 	      }
 	      tmp_vect[jj*(nspecies+1) + nspecies] = rYn(bit(),nspecies+2);
 	      tmp_vect_energy[jj]     = rYn(bit(),nspecies) * 10.0; 
 	      tmp_src_vect_energy[jj] = frc(bit(),nspecies) * 10.0 ;  
 	      bit.next();
 	  }
-	  //fc(bit()) 
+	  // Call cvode in multi-cell mode
           fct_cnt = actual_cReact(tmp_vect, tmp_src_vect, 
 	          tmp_vect_energy, tmp_src_vect_energy,
 	          &plo, &dt_tmp, &time_init, &always_init);
           dt_tmp = dt;
+	  // Work on scnd BoxIterator to pass info back to code 
           for (int jj=0;jj<ncells_packing;jj++){
 	      for (int i=0;i<nspecies; i++){
 		      rYn(bit2(),i)  = tmp_vect[jj*(nspecies+1) + i] * 1.e+03;
 	      }
 	      rYn(bit2(),nspecies+2) = tmp_vect[jj*(nspecies+1) + nspecies];
 	      rYn(bit2(),nspecies)   = tmp_vect_energy[jj] * 1.0e-01; 
+	      fc(bit2()) = fct_cnt;
 	      bit2.next();
 	  }
       }
-      printf("How many boxes in this MD ? %ld %d \n", bx.numPts(), counter);
-      printf("How many boxes integrated in the same cvode loop ? %d\n", ncells_packing);
-      printf("How many cvode calls then ? %d\n", nb_of_iter);
-      //amrex::Abort("end test here");
     }
+    //amrex::Abort("END TEST");
 
     FTemp.clear();
 
