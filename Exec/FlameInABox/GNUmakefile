@@ -1,7 +1,7 @@
 TOP = ../../..
-AMREX_HOME ?= ${TOP}/amrex
-IAMR_HOME ?= ${TOP}/IAMR
-PELELM_HOME ?= ${TOP}/PeleLM
+#AMREX_HOME ?= ${TOP}/amrex
+#IAMR_HOME ?= ${TOP}/IAMR
+#PELELM_HOME ?= ${TOP}/PeleLM
 
 #
 # Build configuration
@@ -18,8 +18,13 @@ VERBOSE         = FALSE
 USE_CUDA        = FALSE
 
 USE_SUNDIALS_3x4x=TRUE
-#CVODE_LIB_DIR = /home/amfelden/CODES/PeleLM/Source/ChemDriver/cvode-4.0.2/instdir/lib/
-CVODE_LIB_DIR = /home/amfelden/CODES/PeleLM/Source/ChemDriver/cvode-4.0.0-development/instdir/lib/
+CVODE_LIB_DIR = /home/amfelden/CODES/PeleLM/Source/ChemDriver/cvode-4.0.2/instdir/lib/
+#CVODE_LIB_DIR = /home/amfelden/CODES/PeleLM/Source/ChemDriver/cvode-4.0.0-development/instdir/lib/
+
+USE_KLU = TRUE
+ifeq ($(USE_KLU), TRUE)
+    DEFINES  += -DUSE_KLU
+endif
 
 # Enable flctin namelist
 #USE_FLCTS       = TRUE

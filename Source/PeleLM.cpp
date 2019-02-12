@@ -5057,29 +5057,29 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       const FArrayBox& frc      = FTemp[Smfi];
       FArrayBox*       chemDiag = (do_diag ? &(diagTemp[Smfi]) : 0);
 
-      //printf("How many cells in this box ? %ld \n", bx.numPts());
-      //printf("number of cells in box ? %d %d \n", bx.size()[0], bx.size()[1]);
-
       // Try and chop FABarray in smaller pieces
       IArrayBox Id(bx,1);
       BoxArray ba(bx);
-      //Const Box&  bx_id = Id.box();
-      //BoxArray ba(bx_id);
+      // Have to account for 3rd dim at some point
       IntVect size_id = parent->maxGridSize(level);
-      size_id[0] = ncells_packing;
-      size_id[1] = 2;
+      size_id[0] = std::min(ncells_packing,size_id[0]);
+      size_id[1] = std::min(ncells_packing/size_id[0], size_id[1]);
       //for (int j = 0; j<BL_SPACEDIM; j++){
       //    size_id[j] = 4;
       //}
       //printf("Re chop the box... ");
       ba.maxSize(size_id);
       //printf("How many boxes in this new box array ? %ld \n", ba.size());
+      int ncells_packing_true = size_id[0] * size_id[1];
+      //printf(" ncells_packing_true ? %d \n", ncells_packing_true);
       for  (int i = 0; i < ba.size(); ++i) {
 	      Id.setVal(i,ba[i]);
       }
 
+      // I'll have to worry about this later
       //BoxArray ba = do_avg_down_chem ? amrex::complementIn(bx,cf_grids) : BoxArray(bx);
 
+      // DVODE
       //for (int i = 0; i < ba.size(); ++i)
       //{
       //  const int s_spec = 0, s_rhoh = nspecies, s_temp = nspecies+2;
@@ -5088,20 +5088,83 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       //                                    s_spec,s_rhoh,s_temp,dt,chemDiag,
       //  				  use_stiff_solver);
       //}
+      
       // CVODE
-
-
       double fct_cnt;
       Real dt_tmp = dt;
       double time_init = 0.0;
       double plo = 1013250.0;
-      int always_init = 0;
+      int always_init = 1;
       long int cells_in_box = bx.numPts();
-      int nb_of_iter = cells_in_box / ncells_packing; 
-      double tmp_vect[ncells_packing*(nspecies+1)];
-      double tmp_src_vect[ncells_packing*nspecies];
-      double tmp_vect_energy[ncells_packing*1];
-      double tmp_src_vect_energy[ncells_packing*1];
+      int nb_of_iter = cells_in_box / ncells_packing_true; 
+      double tmp_vect[ncells_packing_true*(nspecies+1)];
+      double tmp_src_vect[ncells_packing_true*nspecies];
+      double tmp_vect_energy[ncells_packing_true*1];
+      double tmp_src_vect_energy[ncells_packing_true*1];
+
+      const auto len = length(bx);
+      const auto lo  = lbound(bx);
+      const auto hi  = ubound(bx);
+      //const auto& rhoY   = rYn.array();
+      const auto rhoY   = rYn.view(lo);
+      //const auto& frcing = frc.array();
+      const auto frcing = frc.view(lo);
+      //const auto& fcl    = fc.array();
+      const auto fcl    = fc.view(lo);
+      //const auto& Idl    = Id.array();
+      const auto Idl    = Id.view(lo);
+      int nc;
+
+      for         (int tag = 0; tag < ba.size(); ++tag) {
+          nc = 0;
+          //for                       (int k = lo.z; k < hi.z; ++k) {
+              //for                   (int j = lo.y; j < hi.y; ++j) {
+                  //for               (int i = lo.x; i < hi.x; ++i) {
+          for                       (int k = 0; k < len.z; ++k) {
+              for                   (int j = 0; j < len.y; ++j) {
+                  for               (int i = 0; i < len.x; ++i) {
+            	      if (Idl(i,j,k)==tag) {
+            	          for (int sp=0;sp<nspecies; sp++){
+                              tmp_vect[nc*(nspecies+1) + sp] = rhoY(i,j,k,sp) * 1.e-3;
+            		      tmp_src_vect[nc*nspecies + sp] = frcing(i,j,k,sp) * 1.e-3;
+            	          }
+            	          tmp_vect[nc*(nspecies+1) + nspecies] = rhoY(i,j,k,nspecies+2);
+            	          tmp_vect_energy[nc]                  = rhoY(i,j,k,nspecies) * 10.0;
+            	          tmp_src_vect_energy[nc]              = frcing(i,j,k,nspecies) * 10.0;
+		          //printf("Temp of cell %d %d %d %d %d ? %f \n", i,j,k,tag, nc, tmp_vect_energy[nc]);
+            	          nc = nc+1;
+                      }
+                  }
+              }
+	  }
+          //printf("Integrating pack of cells with ID %d (there are %d)... \n", tag, nc);
+          //printf("Integrating for %14.6e \n", dt_tmp);
+          fct_cnt = actual_cReact(tmp_vect, tmp_src_vect, 
+                    tmp_vect_energy, tmp_src_vect_energy,
+                    &plo, &dt_tmp, &time_init, &always_init);
+          dt_tmp = dt;
+          nc = 0;
+          for                       (int k = 0; k < len.z; ++k) {
+              for                   (int j = 0; j < len.y; ++j) {
+                  for               (int i = 0; i < len.x; ++i) {
+            	      if (Idl(i,j,k)==tag) {
+            	          for (int sp=0;sp<nspecies; sp++){
+                              rhoY(i,j,k,sp) = tmp_vect[nc*(nspecies+1) + sp] * 1.e+3;
+            	          }
+            	      rhoY(i,j,k,nspecies+2) = tmp_vect[nc*(nspecies+1) + nspecies];
+            	      rhoY(i,j,k,nspecies)   = tmp_vect_energy[nc] * 1.e-01;
+	              fcl(i,j,k) = fct_cnt;
+            	      nc = nc+1;
+                      }
+                  }
+              }
+	  }
+      }
+
+
+
+
+      /* Second version: via BI... works well !
       // Define 2 bx iterators
       BoxIterator bit(bx);
       BoxIterator bit2(bx);
@@ -5113,8 +5176,9 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       for (int kk=0;kk<nb_of_iter;kk++){
 	  // Work on first BoxIterator to fill tmp arrays 
 	  //printf("  \n");
+	  //printf("  -- Id number ? ");
           for (int jj=0;jj<ncells_packing;jj++){
-              //printf("  -- Id number ? %d \n", Id(bit()));
+              //printf(" %d ", Id(bit()));
 	      for (int i=0;i<nspecies; i++){
 		      tmp_vect[jj*(nspecies+1) + i] = rYn(bit(),i) * 1.e-3;
 		      tmp_src_vect[jj*nspecies + i] = frc(bit(),i) * 1.e-3;
@@ -5124,6 +5188,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 	      tmp_src_vect_energy[jj] = frc(bit(),nspecies) * 10.0 ;  
 	      bit.next();
 	  }
+	  //printf("\n");
 	  // Call cvode in multi-cell mode
           fct_cnt = actual_cReact(tmp_vect, tmp_src_vect, 
 	          tmp_vect_energy, tmp_src_vect_energy,
@@ -5140,6 +5205,8 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 	      bit2.next();
 	  }
       }
+    */
+
     }
     //amrex::Abort("END TEST");
 

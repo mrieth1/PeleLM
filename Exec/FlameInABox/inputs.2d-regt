@@ -126,7 +126,9 @@ ns.hi_bc          = 0 2
 geometry.is_periodic = 1 0
 
 ns.ncells_packing  = 1
-ns.cvode_iJac = 0
+ns.cvode_iJac = 1
+ns.cvode_iDense = 99
+
 
 # >>>>>>>>>>>>>  BC FLAGS <<<<<<<<<<<<<<<<
 # 0 = Interior           3 = Symmetry
