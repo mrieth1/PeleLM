@@ -229,7 +229,8 @@ private:
                           amrex::Real            dt,
                           const amrex::MultiFab& Force,
                           int             nCompF,
-                          bool            use_stiff_solver = true);
+                          bool            use_stiff_solver, // = true,
+                          int             iteration);
 
 #ifdef USE_WBAR
   void calcDiffusivity_Wbar (const amrex::Real time);

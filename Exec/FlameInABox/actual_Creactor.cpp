@@ -693,17 +693,17 @@ static int jtv(N_Vector v, N_Vector Jv, realtype t, N_Vector u, N_Vector fu,
 static int Precond_sparse(realtype tn, N_Vector u, N_Vector fu, booleantype jok, 
 		booleantype *jcurPtr, realtype gamma, void *user_data)
 {
-  std::chrono::time_point<std::chrono::system_clock> start, end;		
-  std::chrono::time_point<std::chrono::system_clock> start_Jcomp, end_Jcomp;		
-  std::chrono::time_point<std::chrono::system_clock> start_JNcomp, end_JNcomp;		
-  std::chrono::time_point<std::chrono::system_clock> start_LUfac, end_LUfac;		
+  //std::chrono::time_point<std::chrono::system_clock> start, end;		
+  //std::chrono::time_point<std::chrono::system_clock> start_Jcomp, end_Jcomp;		
+  //std::chrono::time_point<std::chrono::system_clock> start_JNcomp, end_JNcomp;		
+  //std::chrono::time_point<std::chrono::system_clock> start_LUfac, end_LUfac;		
   
   //std::chrono::duration<double> elapsed_seconds_Jcomp;
   //std::chrono::duration<double> elapsed_seconds_JNcomp;
   //std::chrono::duration<double> elapsed_seconds_LUfac;
   //std::chrono::duration<double> elapsed_seconds_Pcond_prov;
 
-  start = std::chrono::system_clock::now();
+  //start = std::chrono::system_clock::now();
 
   int ok,tid;
 
@@ -819,8 +819,8 @@ static int Precond_sparse(realtype tn, N_Vector u, N_Vector fu, booleantype jok,
   //end_LUfac = std::chrono::system_clock::now();
   //elapsed_seconds_LUfac = end_LUfac - start_LUfac;
 
-  end = std::chrono::system_clock::now();
-  elapsed_seconds_Pcond = elapsed_seconds_Pcond + end - start;
+  //end = std::chrono::system_clock::now();
+  //elapsed_seconds_Pcond = elapsed_seconds_Pcond + end - start;
 
   //elapsed_seconds_Pcond_prov = end - start;
   //std::cout << " stats (Jcomp,JNcomp,pivots,TOTAL) = " << elapsed_seconds_Jcomp.count() <<  " " << elapsed_seconds_JNcomp.count() << " " << elapsed_seconds_LUfac.count() << " " << elapsed_seconds_Pcond_prov.count() << std::endl;
@@ -1191,7 +1191,7 @@ static UserData AllocUserData(void)
           data_wk->Jdata[i] = SUNSparseMatrix_Data((data_wk->PS)[i]);
           sparsity_preproc_precond_(data_wk->rowVals[i],data_wk->colPtrs[i],&HP);
           klu_defaults (&(data_wk->Common[i]));
-          printf("--> so far so good ? \n ");
+          //printf("--> so far so good ? \n ");
           //data_wk->Common.btf = 0;
           //(data_wk->Common[i]).maxwork = 15;
           //data_wk->Common.ordering = 1;

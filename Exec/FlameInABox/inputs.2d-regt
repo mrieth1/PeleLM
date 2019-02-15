@@ -125,7 +125,7 @@ ns.lo_bc          = 0 5
 ns.hi_bc          = 0 2
 geometry.is_periodic = 1 0
 
-ns.ncells_packing  = 1
+ns.ncells_packing  = 32
 ns.cvode_iJac = 1
 ns.cvode_iDense = 99
 

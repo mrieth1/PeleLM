@@ -127,9 +127,11 @@ ChemDriver::Parameter::GetParamString() const
   else if (param_id == THIRD_BODY) {return "THIRD_BODY";}
   else{
       amrex::Abort("Unknown reaction parameter");
+      return "BLUBLI";
   }
 
 }
+
 std::ostream&
 ChemDriver::Parameter::operator<<(std::ostream& os) const
 {
