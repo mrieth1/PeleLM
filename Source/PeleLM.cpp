@@ -5126,7 +5126,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 	      count_box = count_box + 1;
           }
       } else {
-          printf("  -- Dealing with other iterations... PACKED CVODE \n");
+          //printf("  -- Dealing with other iterations... PACKED CVODE \n");
       
           int ncells_packing_true = ncells_packing;
 
@@ -5157,14 +5157,14 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
           int nc;
 	  int num_cell_cvode_int = 0;
           for         (int tag = 0; tag < 3; ++tag) {
-              printf("    -- Working on tag (BI, BS) %d (%d %d) ... \n", tag, tag_bds[tag], tag_bds[tag+1]);
+              //printf("    -- Working on tag (BI, BS) %d (%d %d) ... \n", tag, tag_bds[tag], tag_bds[tag+1]);
               nc = 0;
               for                       (int k = 0; k < len.z; ++k) {
                   for                   (int j = 0; j < len.y; ++j) {
                       for               (int i = 0; i < len.x; ++i) {
-			  printf("FctCount ? %f \n ", fcl(i,j,k));
+			  //printf("FctCount ? %f \n ", fcl(i,j,k));
                 	  if ((fcl(i,j,k) > tag_bds[tag]) && (fcl(i,j,k) <= tag_bds[tag+1])) {
-		              printf("In tag %d \n ", tag);
+		              //printf("In tag %d \n ", tag);
                 	      for (int sp=0;sp<nspecies; sp++){
                                   tmp_vect[nc*(nspecies+1) + sp] = rhoY(i,j,k,sp) * 1.e-3;
                 	          tmp_src_vect[nc*nspecies + sp] = frcing(i,j,k,sp) * 1.e-3;
@@ -5226,7 +5226,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
               }
 
           }
-	  printf(" FAB: %d cvode integrated: %d \n", num_cell_in_FAB, num_cell_cvode_int);
+	  //printf(" FAB: %d cvode integrated: %d \n", num_cell_in_FAB, num_cell_cvode_int);
 	  if (num_cell_cvode_int != num_cell_in_FAB ) {
               amrex::Abort("Inconsistent number of integrated cells !! ");
 	  } 
