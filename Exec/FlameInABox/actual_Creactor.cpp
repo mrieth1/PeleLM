@@ -275,10 +275,6 @@ int actual_cReact(realtype *rY_in, realtype *rY_src_in,
 	// rhoY,T
 	std::memcpy(yvec_d, rY_in, sizeof(realtype) * ((NEQ+1)*NCELLS));
 	temperature_save = rY_in[NEQ];
-        for (int tid = 0; tid < NCELLS; tid ++) {
-            int offset = tid * (NEQ + 1); 
-	    //printf(" T cell %d ? %4.16e \n",tid, rY_in[offset + NEQ]);
-	}
 	// rhoY_src_ext
 	std::memcpy(rYsrc, rY_src_in, (NEQ*NCELLS)*sizeof(double));
 	// rhoE/rhoH
@@ -322,9 +318,6 @@ int actual_cReact(realtype *rY_in, realtype *rY_src_in,
 	//flag = CVode(cvode_mem, time_out, y, &dummy_time, CV_ONE_STEP);
 	if (check_flag(&flag, "CVode", 1)) return(1);
 
-	//CHECK THIS
-	//CVodeGetCurrentTime(cvode_mem, time);
-	//*time = time_out;
 	*dt_react = dummy_time - time_init;
         if (iverbose > 3) {
 	    printf("END : time curr is %14.6e and actual dt_react is %14.6e \n", dummy_time, *dt_react);
@@ -381,6 +374,8 @@ int actual_cReact(realtype *rY_in, realtype *rY_src_in,
                 //ckwc_(&temp, activity, iwrk, rwrk, cdot);
 	        // *P_in = cdot[2];
 	    }
+
+	    PrintFinalStats(cvode_mem, rY_in[NEQ], InitPartial);
 
 	} else if (iverbose > 2) {
 	    printf("\nAdditional verbose info --\n");
@@ -1125,7 +1120,6 @@ static int check_flag(void *flagvalue, const char *funcname, int opt)
 static UserData AllocUserData(void)
 {
   UserData data_wk;
-  //const int ncells = NCELLS;
 
   data_wk = (UserData) malloc(sizeof *data_wk);
 

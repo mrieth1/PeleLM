@@ -1,4 +1,4 @@
-TOP = ../../..
+#TOP = ../../..
 #AMREX_HOME ?= ${TOP}/amrex
 #IAMR_HOME ?= ${TOP}/IAMR
 #PELELM_HOME ?= ${TOP}/PeleLM
@@ -7,7 +7,7 @@ TOP = ../../..
 # Build configuration
 #
 
-DIM             = 2
+DIM             = 3
 COMP            = gnu
 DEBUG           = FALSE
 USE_MPI         = TRUE
@@ -19,7 +19,6 @@ USE_CUDA        = FALSE
 
 USE_SUNDIALS_3x4x=TRUE
 CVODE_LIB_DIR = /home/amfelden/CODES/PeleLM/Source/ChemDriver/cvode-4.0.2/instdir/lib/
-#CVODE_LIB_DIR = /home/amfelden/CODES/PeleLM/Source/ChemDriver/cvode-4.0.0-development/instdir/lib/
 
 USE_KLU = TRUE
 ifeq ($(USE_KLU), TRUE)
@@ -44,7 +43,6 @@ endif
 # Choose model (from list below), and pmf file
 Chemistry_Model = DRM19
 fEXE_sources += DRM19_T298_Phi1.0_X.f
-#drm19Soln_seed_0.50.f
 
 #Chemistry_Model = LIDRYER
 #fEXE_sources += LiDryer_040_01ATM.f
@@ -59,7 +57,7 @@ Blocs   := .
 
 CEXE_sources += actual_Creactor.cpp  actual_Creactor_unit.cpp
 FEXE_sources += Prob_$(DIM)d.F Prob_F.F
-CEXE_headers +=  
+CEXE_headers += 
 FEXE_headers += probdata.H Prob_F.H
 
 include $(PELELM_HOME)/Tools/Make/Make.PeleLM

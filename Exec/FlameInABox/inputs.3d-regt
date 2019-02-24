@@ -1,5 +1,4 @@
 #----------------------------TOP LEVEL INPUTS----------------------
-max_step  =  10000
 max_step  =  5
 stop_time = 4.00
 
@@ -42,9 +41,7 @@ ns.do_group_bndry_fills = 1
 cg.cg_solver=1
 
 #-------------------------AMR INPUTS----------------------------
-amr.n_cell    = 64 64 64
-amr.n_cell    = 128 128 128
-amr.n_cell    = 16 16 16 
+amr.n_cell    = 16 8 64
 
 amr.v=1
 amr.max_level =  2            # maximum level number allowed
@@ -53,19 +50,19 @@ amr.regrid_int      = 2       # how often to regrid
 amr.n_error_buf     = 1 1 1 2 # number of buffer cells in error est
 amr.grid_eff        = 0.9     # what constitutes an efficient grid
 amr.grid_eff        = 0.7     # what constitutes an efficient grid
-amr.blocking_factor = 8       # block factor in grid generation
+amr.blocking_factor = 8     # block factor in grid generation
 
-amr.checkpoint_files_output = 0
+amr.checkpoint_files_output = 1
 amr.check_file      = chk     # root name of checkpoint file
 amr.check_int       = 5       # number of timesteps between checkpoints
 
 amr.plot_file       = plt
-amr.plot_int        = 500
+amr.plot_int        = 1
 #amr.derive_plot_vars=rhoRT mag_vort particle_count mean_progress_curvature
 amr.derive_plot_vars=rhoRT mag_vort avg_pressure gradpx gradpy gradpz diveru
 
 amr.grid_log        = grdlog  # name of grid logging file
-amr.max_grid_size   = 64
+amr.max_grid_size   = 16
 #amr.derive_plot_vars=ALL
 
 amr.probin_file = probin.3d.test # This will default to file "probin" if not set
@@ -107,9 +104,9 @@ ns.divu_ceiling = 1
 ns.divu_dt_factor = .4
 ns.min_rho_divu_ceiling = .01
 
-ns.fuelName        = H2
+ns.fuelName        = CH4
 ns.oxidizerName    = O2
-ns.flameTracName   = H
+ns.flameTracName   = CH3
 ns.unity_Le = 0
 
 ns.dpdt_option = 0
@@ -126,6 +123,10 @@ ns.lo_bc          = 0 0 5
 ns.hi_bc          = 0 0 2
 geometry.is_periodic = 1 1 0
 
+ns.ncells_packing  = 32
+ns.cvode_iJac = 1
+ns.cvode_iDense = 99
+
 # >>>>>>>>>>>>>  BC FLAGS <<<<<<<<<<<<<<<<
 # 0 = Interior           3 = Symmetry
 # 1 = Inflow             4 = SlipWall
@@ -134,7 +135,7 @@ geometry.is_periodic = 1 1 0
 geometry.coord_sys = 0  # 0 => cart, 1 => RZ
 
 geometry.prob_lo   =  0. 0. 0.
-geometry.prob_hi   = .016 .016 .016
+geometry.prob_hi   = .016 .008 .064
 
 
 # ------------------  INPUTS TO GODUNOV CLASS ----------------------

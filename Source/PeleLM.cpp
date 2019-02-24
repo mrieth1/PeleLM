@@ -5059,7 +5059,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 
       MF_idx += 1; 
       num_cell_in_FAB = bx.numPts();
-      printf("  -- %d cells in FAB %d \n", num_cell_in_FAB, MF_idx);
+      //printf("  -- %d cells in FAB %d \n", num_cell_in_FAB, MF_idx);
       
       // I'll have to worry about this later
       // MARC SAYS IT DOES NOT WORK YET
@@ -5082,7 +5082,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       double plo = 1013250.0;
       int always_init = 1;
       if (iteration == 0) {
-          printf("  -- Dealing with first iteration... UNIT CVODE \n");
+          //printf("  -- Dealing with first iteration... UNIT CVODE \n");
 	  // Def the fctCount
 	  // OPTION 1: via T
           //for                       (int k = 0; k < len.z; ++k) {
@@ -5226,7 +5226,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
               }
 
           }
-	  //printf(" FAB: %d cvode integrated: %d \n", num_cell_in_FAB, num_cell_cvode_int);
+	  printf(" FAB: %d cvode integrated: %d \n", num_cell_in_FAB, num_cell_cvode_int);
 	  if (num_cell_cvode_int != num_cell_in_FAB ) {
               amrex::Abort("Inconsistent number of integrated cells !! ");
 	  } 
