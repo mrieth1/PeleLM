@@ -1,0 +1,8 @@
+plt0*
+chk0*
+out_*
+
+tmp_build_dir
+*_bu
+*.ex
+*.py
