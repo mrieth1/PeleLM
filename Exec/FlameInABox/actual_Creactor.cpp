@@ -116,7 +116,7 @@ int extern_cInit(const int* cvode_meth,const int* cvode_itmeth,
 	//flag = CVodeSetNonlinConvCoef(cvode_mem, 1.0e-03);
 	//if (check_flag(&flag, "CVodeSetNonlinConvCoef", 1)) return(1);
 
-	flag = CVodeSetMaxNonlinIters(cvode_mem, 15);
+	flag = CVodeSetMaxNonlinIters(cvode_mem, 50);
 	if (check_flag(&flag, "CVodeSetMaxNonlinIters", 1)) return(1);
 
 	flag = CVodeSetMaxErrTestFails(cvode_mem, 100);
@@ -217,11 +217,11 @@ int extern_cInit(const int* cvode_meth,const int* cvode_itmeth,
 	}
 
         /* Set the max number of time steps */ 
-	flag = CVodeSetMaxNumSteps(cvode_mem, 10000);
+	flag = CVodeSetMaxNumSteps(cvode_mem, 100000);
 	if(check_flag(&flag, "CVodeSetMaxNumSteps", 1)) return(1);
 
         /* Set the max order */ 
-        flag = CVodeSetMaxOrd(cvode_mem, 2);
+        flag = CVodeSetMaxOrd(cvode_mem, 5);
 	if(check_flag(&flag, "CVodeSetMaxOrd", 1)) return(1);
 
 	/* Define vectors to be used later in creact */
@@ -599,16 +599,7 @@ static int cJac_KLU(realtype tn, N_Vector u, N_Vector fu, SUNMatrix J,
 	  //printf(" Col %d has %d vals \n", i-1, nbVals);
 	  for (int j = 0; j < nbVals; j++) {
 	          idx = data_wk->rowVals[0][ data_wk->colPtrs[0][i - 1] + j ];
-          //        //printf(" -- Val %d is %d \n", j, idx);
-	  //        if ((idx == NEQ) && (i-1 != NEQ)) {
-	  //            data[ data_wk->colPtrs[0][offset + i - 1] + j ] = Jmat_tmp[(i - 1) * (NEQ + 1) + idx] / molecular_weight[i-1] ;
-	  //        } else if ((idx != NEQ) && (i-1 == NEQ)) {
-	  //            data[ data_wk->colPtrs[0][offset + i - 1] + j ] = Jmat_tmp[(i - 1) * (NEQ + 1) + idx] * molecular_weight[idx] ;
-	  //        } else if ((idx != NEQ) && (i-1 != NEQ)) {
-	  //            data[ data_wk->colPtrs[0][offset + i - 1] + j ] = Jmat_tmp[(i - 1) * (NEQ + 1) + idx] * molecular_weight[idx] / molecular_weight[i-1];
-	  //        } else {
 	              data[ data_wk->colPtrs[0][offset + i - 1] + j ] = Jmat_tmp[(i - 1) * (NEQ + 1) + idx];
-	  //        }
 	  }
       }
   }
@@ -759,6 +750,7 @@ static int Precond_sparse(realtype tn, N_Vector u, N_Vector fu, booleantype jok,
                     (Jbd[tid][tid])[NEQ][i] = Jmat[NEQ*(NEQ+1) + i] * molecular_weight[i];
                 }
 	        (Jbd[tid][tid])[NEQ][NEQ] = Jmat[(NEQ+1)*(NEQ+1)-1];
+	        temp_save = temp;
 	    } else {
 		/* if not: copy the one from prev cell */
 		for (int i = 0; i < NEQ+1; i++) {
@@ -923,8 +915,6 @@ static int PSolve_sparse(realtype tn, N_Vector u, N_Vector fu, N_Vector r, N_Vec
 
   /* Solve the block-diagonal system Pz = r using LU factors stored
      in P and pivot data in pivot, and return the solution in z. */
-  //realtype **zdata_cell;
-  //zdata_cell = new realtype*[NCELLS];
   int tid, offset_beg, offset_end;
   realtype zdata_cell[NEQ+1];
   for (tid = 0; tid < NCELLS; tid ++) {
