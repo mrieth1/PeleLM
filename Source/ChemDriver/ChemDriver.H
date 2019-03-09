@@ -19,6 +19,7 @@ extern "C" {
   void CD_XTY_PT(const amrex::Real* X, amrex::Real* Y); // Mole fraction, X, to mass fraction, Y
   void CD_YTX_PT(const amrex::Real* X, amrex::Real* Y); // Mass fraction, Y, to mole fraction, X
   void CD_MWT(amrex::Real* mwt); // Species molecular weight, mwt
+  void CD_CHRG(int* chrg); // Species electronic charge
 };
 
 class ChemDriver
@@ -93,6 +94,7 @@ public:
     amrex::Vector<amrex::Real> elementAtomicWt () const;
     int index (const std::string& specName) const;
     int indexElt (const std::string& eltName) const;
+	 amrex::Vector<int> speciesCharge() const;
     amrex::Vector<int> reactionsWithXonL (const std::string& lSpecName) const;
     amrex::Vector<int> reactionsWithXonR (const std::string& rSpecName) const;
     amrex::Vector<std::pair<std::string,int> > specCoeffsInReactions (int reacIdx) const;

@@ -554,6 +554,16 @@ ChemDriver::elementAtomicWt() const
     return awt;
 }
 
+#ifdef USE_EFIELD
+Vector<int> 
+ChemDriver::speciesCharge() const
+{
+    Vector<int> chrg(numSpecies());
+    CD_CHRG(chrg.dataPtr());
+    return chrg;
+}
+#endif
+
 extern "C" {
   void CD_MWT(Real* mwt)
   {
@@ -562,6 +572,17 @@ extern "C" {
     }
     get_CKMWT(mwt);
   }
+
+#ifdef USE_EFIELD
+  void CD_CHRG(int* chrg)
+  {
+     if (!initialized) {
+       amrex::Abort("Must construct the ChemDriver prior to calling CD_CHRG");
+     }
+     FORT_GETCKCHRG(chrg);
+  }
+#endif
+
   void CD_XTY_PT(const Real* X, Real* Y)
   {
     if (!initialized) {

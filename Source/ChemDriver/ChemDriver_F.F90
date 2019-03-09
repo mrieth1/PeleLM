@@ -32,7 +32,7 @@ module chem_driver
             GETCKNUMELT, get_CK_num_reac, RUNIV, P1ATMMKS, GETCKELTNAME, &
             GETCKSPECNAME,CKSYMR,get_spec_name,get_spec_number,get_CKMWT, &
             FORT_GETCKAWT,conpFY,conpJY,conpFY_sdc,TfromeYpt,TfromHYpt, &
-            open_vode_failure_file
+            FORT_GETCKCHRG,open_vode_failure_file
 
 contains
 
@@ -712,6 +712,18 @@ contains
     call CKAWT(IWRK(ckbi),RWRK(ckbr),awt)
 
   end subroutine FORT_GETCKAWT
+
+#ifdef USE_EFIELD      
+  subroutine FORT_GETCKCHRG(chrg)bind(C, name="FORT_GETCKCHRG")
+
+     implicit none
+#include "cdwrk.H"
+     integer chrg(*)
+
+     call CKCHRG(IWRK(ckbi),RWRK(ckbr),chrg)
+
+  end subroutine FORT_GETCKCHRG
+#endif      
 
 !------------------------------------  
   

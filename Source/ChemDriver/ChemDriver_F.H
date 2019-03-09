@@ -24,6 +24,7 @@ extern "C" {
     int CKELTXINSPY(const int* eltID, const int* spID);
     void get_CKMWT(amrex::Real* mwt);
     void FORT_GETCKAWT(amrex::Real* awt);
+    void FORT_GETCKCHRG(int* chrg);
     void FINDLHS(int* reactions, int* listLen, const int* idx);
     void FINDRHS(int* reactions, int* listLen, const int* idx);
     void CKINU(int* Nids,int* KI,const int* lenKI,int* NU,const int* lenNU,
