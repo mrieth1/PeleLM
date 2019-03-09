@@ -13,6 +13,10 @@ ifeq ($(USE_WBAR),TRUE)
     DEFINES += -DUSE_WBAR
 endif
 
+ifeq ($(USE_EFIELD),TRUE)
+	 DEFINES += -DUSE_EFIELD
+endif
+
 PELE_PHYSICS_HOME ?= $(TOP)/PelePhysics
 CHEM_HOME = $(PELE_PHYSICS_HOME)/Support/Fuego/Mechanism/Models
 
@@ -45,6 +49,9 @@ ifeq ($(Chemistry_Model), CH4-15step)
 endif
 ifeq ($(Chemistry_Model), LIDRYER)
   CHEM_DIR = $(CHEM_HOME)/LiDryer
+endif
+ifeq ($(Chemistry_Model), CH4ionsSk)
+  CHEM_DIR = $(CHEM_HOME)/CH4_ion_LuSk
 endif
 
 ifdef CHEM_DIR
