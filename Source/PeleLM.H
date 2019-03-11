@@ -487,6 +487,14 @@ private:
   static int         num_mac_sync_iter;
     
   static int nGrowAdvForcing;
+
+#ifdef USE_EFIELD
+  static int         nE;
+  static int         PhiV;
+  static int         have_nE;
+  static int         have_PhiV;
+#endif  
+
 };
 
 #endif /*_PeleLM_H_*/

@@ -22,6 +22,8 @@
 
 module derive_PLM_3D
 
+  USE mod_chemdriver_defs, ONLY : Nspec, maxspec 
+
   implicit none
 
   private
@@ -42,7 +44,6 @@ contains
 ! ::: This routine will computes rho - sum (rho*Y)
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
       integer    lo(SDIM), hi(SDIM)
@@ -102,7 +103,6 @@ contains
 ! ::: This routine will computes sum (rhoYdot or Ydot)
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
       integer    lo(SDIM), hi(SDIM)
@@ -163,7 +163,6 @@ contains
 ! ::: This routine will derive rho*R*T
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
       
       integer    lo(SDIM), hi(SDIM)
@@ -227,8 +226,6 @@ contains
       use chem_driver_3D, only : mass_to_mole
       implicit none
 
-#include <cdwrk.H>
-
       integer    lo(SDIM), hi(SDIM)
       integer    DIMDEC(x)
       integer    DIMDEC(dat)
@@ -278,8 +275,6 @@ contains
                                
       use chem_driver_3D, only: MASSR_TO_CONC
       implicit none
-
-#include <cdwrk.H>
 
       integer    lo(SDIM), hi(SDIM)
       integer    DIMDEC(C)
@@ -337,7 +332,6 @@ contains
 ! ::: This routine will computes the forcing term
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
       integer    lo(SDIM), hi(SDIM)
@@ -513,7 +507,6 @@ contains
 ! ::: This routine will computes the forcing term
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
       integer    lo(SDIM), hi(SDIM)
@@ -665,7 +658,6 @@ contains
 ! ::: This routine will computes the forcing term
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
       integer    lo(SDIM), hi(SDIM)
@@ -818,7 +810,6 @@ contains
 ! ::: This routine will computes the forcing term
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
       integer    lo(SDIM), hi(SDIM)

@@ -14,9 +14,10 @@ contains
 
   subroutine set_prob_spec(fuel, oxid, prod, numspec) &
                                 bind(C, name="set_prob_spec")
+       
+      USE mod_chemdriver_defs, ONLY : Nspec                       
  
       implicit none
-#include <cdwrk.H>
 #include <probdata.H>
       integer fuel, oxid, prod, numspec
       fuelID = fuel + 1
@@ -34,11 +35,10 @@ contains
   subroutine set_Y_from_Phi(phi,Yt)bind(C, name="set_Y_from_Phi")
   
       use chem_driver, only: get_spec_name
+      USE mod_chemdriver_defs, ONLY : maxspec, maxspnml, Nspec, iN2, IWRK, RWRK
   
       implicit none
 #include <probdata.H>
-#include <cdwrk.H>
-#include <conp.H>
       REAL_T a, phi
       REAL_T Xt(maxspec), Yt(maxspec)
       integer n

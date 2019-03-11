@@ -300,6 +300,48 @@ set_species_bc (BCRec&       bc,
   }
 }
 
+
+#ifdef USE_EFIELD
+static
+int
+ne_bc[] =
+{
+  INT_DIR, EXT_DIR, EXT_DIR, REFLECT_EVEN, REFLECT_EVEN, EXT_DIR
+};
+static
+int
+phiv_bc[] =
+{
+  INT_DIR, EXT_DIR, EXT_DIR, REFLECT_EVEN, REFLECT_EVEN, EXT_DIR
+};
+
+void
+set_ne_bc (BCRec&       bc,
+           const BCRec& phys_bc)
+{
+  const int* lo_bc = phys_bc.lo();
+  const int* hi_bc = phys_bc.hi();
+  for (int i = 0; i < BL_SPACEDIM; i++)
+  {
+    bc.setLo(i,ne_bc[lo_bc[i]]);
+    bc.setHi(i,ne_bc[hi_bc[i]]);
+  }
+}
+static
+void
+set_phiv_bc (BCRec&       bc,
+             const BCRec& phys_bc)
+{
+  const int* lo_bc = phys_bc.lo();
+  const int* hi_bc = phys_bc.hi();
+  for (int i = 0; i < BL_SPACEDIM; i++)
+  {
+    bc.setLo(i,phiv_bc[lo_bc[i]]);
+    bc.setHi(i,phiv_bc[hi_bc[i]]);
+  }
+}
+#endif
+
 typedef StateDescriptor::BndryFunc BndryFunc;
 
 extern "C"
@@ -442,6 +484,10 @@ PeleLM::variableSetUp ()
   int FirstSpec = -1;
   int Trac      = -1;
   int RhoRT     = -1;
+#ifdef USE_EFIELD  
+  int nE        = -1;
+  int PhiV      = -1;
+#endif
 
   FirstSpec = ++counter;
   nspecies  = getChemSolve().numSpecies();
@@ -452,6 +498,10 @@ PeleLM::variableSetUp ()
 #ifndef BL_RHORT_IN_TRACER
   RhoRT = ++counter;
 #endif
+#ifdef USE_EFIELD  
+  nE = ++counter;
+  PhiV = ++counter;
+#endif
   NUM_STATE = ++counter;
   NUM_SCALARS = NUM_STATE - Density;
 
@@ -461,6 +511,10 @@ PeleLM::variableSetUp ()
   for (int i = 0; i < nspecies; i++)
     amrex::Print() << names[i] << ' ' << ' ';
   amrex::Print() << '}' << '\n' << '\n';
+
+#ifdef USE_EFIELD
+  amrex::Print() << " Including electric field, adding nE and phiV to State_Type \n" << "\n" ;
+#endif
 
   //
   // Send indices of fuel and oxidizer to fortran for setting prob data in common block
@@ -617,6 +671,14 @@ PeleLM::variableSetUp ()
     desc_lst.setComponent(State_Type,Trac,"tracer",bc,BndryFunc(adv_fill));
   }
 
+#ifdef USE_EFIELD
+    set_ne_bc(bc,phys_bc);
+    desc_lst.setComponent(State_Type,nE,"nE",bc,BndryFunc(ne_fill));
+
+    set_phiv_bc(bc,phys_bc);
+    desc_lst.setComponent(State_Type,PhiV,"PhiV",bc,BndryFunc(phiv_fill));
+#endif
+
   advectionType.resize(NUM_STATE);
   diffusionType.resize(NUM_STATE);
   is_diffusive.resize(NUM_STATE);
@@ -670,6 +732,14 @@ PeleLM::variableSetUp ()
 
   if (is_diffusive[Density])
     amrex::Abort("PeleLM::variableSetUp(): density cannot diffuse");
+
+#ifdef USE_EFIELD
+  is_diffusive[nE] = false;
+  advectionType[nE] = NonConservative;
+  is_diffusive[PhiV] = false;
+  advectionType[PhiV] = NonConservative;
+#endif
+
   //
   // ---- pressure
   //

@@ -21,6 +21,9 @@
 
 module chem_driver
 
+  USE mod_chemdriver_defs, ONLY : maxspnml, maxreac, maxspec, Nspec, IWRK, RWRK, &
+                                  ckbi, ckbr
+
   implicit none
 
   private
@@ -37,12 +40,13 @@ module chem_driver
 contains
 
   subroutine drv_get_reaction_map(rmap)bind(C,name="drv_get_reaction_map")
+
+    USE mod_chemdriver_defs, ONLY : Nreac  
   
     implicit none
 
-#include "cdwrk.H"
+    integer rmap(Nreac)
 
-    integer rmap(nReac)
     call GET_REACTION_MAP(rmap) 
   
   end subroutine drv_get_reaction_map
@@ -50,11 +54,12 @@ contains
 !------------------------------------
   
   subroutine set_Tmin_trans(TminTRANS)bind(C,name="set_Tmin_trans")
+
+    USE mod_chemdriver_defs, ONLY : TMIN_TRANS 
   
     implicit none
-    REAL_T TminTRANS
 
-#include "cdwrk.H"
+    REAL_T TminTRANS
 
     TMIN_TRANS = TminTRANS
 
@@ -64,9 +69,9 @@ contains
   
   subroutine SETVERBOSEVODE()bind(C, name="SETVERBOSEVODE")
     
-    implicit none
+    USE mod_chemdriver_defs, ONLY : verbose_vode
 
-#include "cdwrk.H"
+    implicit none
 
     verbose_vode = 1
 
@@ -76,11 +81,11 @@ contains
     
   subroutine SETVODETOLS(rtol,atol,itol)bind(C, name="SETVODETOLS")
   
+    USE mod_chemdriver_defs, ONLY : vode_itol, vode_rtol, vode_atol
+
     implicit none
     integer itol
     REAL_T rtol,atol
-
-#include "cdwrk.H"
 
     vode_itol = itol
     vode_rtol = rtol
@@ -92,10 +97,11 @@ contains
   
   subroutine set_vode_subcyc(maxcyc)bind(C, name="set_vode_subcyc")
 
-    implicit none
-    integer maxcyc
+    USE mod_chemdriver_defs, ONLY : max_vode_subcycles
 
-#include "cdwrk.H"
+    implicit none
+
+    integer maxcyc
 
     max_vode_subcycles = maxcyc
 
@@ -105,9 +111,9 @@ contains
   
   subroutine set_spec_scal_Y(name, nlength)bind(C, name="set_spec_scal_Y")
     
-    implicit none
+    USE mod_chemdriver_defs, ONLY : spec_scalY 
 
-#include "cdwrk.H"
+    implicit none
 
     integer nlength, name(nlength), i, j, maxlen
     REAL_T val
@@ -147,11 +153,13 @@ contains
 !------------------------------------ 
   
   subroutine INITCHEM()bind(C, name="INITCHEM")
-  
-    implicit none
 
-#include "cdwrk.H"
-#include "conp.H"
+    USE mod_chemdriver_defs, ONLY : verbose_vode, max_vode_subcycles, spec_scalY, thickFacCH, &
+                                    eg_nodes, Nreac, Nfit, Nelt, dvr, dvbr, dvi, dvdr, dvdbr, dvbi, &
+                                    dvder, use_eg, use_mc, EGIWRK, EGRWRK, MCRWRK, MCIWRK, eg_IFLAG, &
+                                    eg_ITLS, LLINKMC, MAXTP, NEQ, NRHO, NP, NWT, NWTI, NZ, iN2, iE_sp
+
+    implicit none
 
     interface
       integer function FORT_USINGEG() bind(C,name="FORT_USINGEG")
@@ -286,15 +294,28 @@ contains
     end do
     if (iN2.eq.-1) &
         write(6,*) '.....warning: no N2 in chemistry species list'
+
+#ifdef USE_EFIELD      
+    !
+    ! Find E in species list.
+    !
+    iE_sp = -1
+    DO n = 1, Nspec
+       CALL get_spec_name(name,n)
+       IF ( name .eq. 'E' ) iE_sp = n
+    END DO
+    IF (iE_sp == -1) WRITE(6,*) ' .... WARNING: USE_EFIELD = TRUE but no electron found in the chem model !'
+#endif
+
   end subroutine INITCHEM
 
 !----------------------------------
   
   subroutine finalize_chem()bind(C, name="finalize_chem")
+
+    USE mod_chemdriver_defs, ONLY : EGRWRK, EGIWRK, MCRWRK, MCIWRK 
  
     implicit none
-
-#include "cdwrk.H"
 
     interface
       integer function FORT_USINGEG() bind(C,name="FORT_USINGEG")
@@ -332,7 +353,6 @@ contains
   
     implicit none
 
-#include "cdwrk.H"
     GETCKMAXNAMELEN = maxspnml
 
   end function GETCKMAXNAMELEN
@@ -344,12 +364,11 @@ contains
                             imaxspnml)&
                             bind(C, name="GETCKDIMPARAMS")
                                     
+    USE mod_chemdriver_defs, ONLY : maxelts, maxthrdb, maxtp, maxsp                     
                                     
     implicit none
     integer imaxreac, imaxspec, imaxelts, imaxord
     integer imaxthrdb, imaxtp, imaxsp, imaxspnml
-
-#include "cdwrk.H"
 
     imaxreac = maxreac
     imaxspec = maxspec
@@ -370,7 +389,6 @@ contains
     integer reactions(*), Nreacs, id
 
 #ifdef MIKE
-#include "cdwrk.H"
 
     integer j, n, Ndim, Nids, KI(maxsp), NU(maxsp)
     Ndim = maxsp
@@ -401,7 +419,6 @@ contains
     integer reactions(*), Nreacs, id
 
 #ifdef MIKE
-#include "cdwrk.H"
     
     integer j, n, Ndim, Nids, KI(maxsp), NU(maxsp)
     Ndim = maxsp
@@ -430,8 +447,6 @@ contains
   
     implicit none
 
-#include "cdwrk.H"
-
     integer lenNU
     integer nu(maxreac,maxspec)
 
@@ -446,10 +461,10 @@ contains
 !------------------------------------  
   
   subroutine CKINU(Nids,KI,lenKI,NU,lenNU,rxnID,nuAll)bind(C, name="CKINU")
+
+    USE mod_chemdriver_defs, ONLY : maxsp, Nreac 
   
     implicit none
-
-#include "cdwrk.H"
 
     integer lenKI,lenNU
     integer rxnID, Nids, KI(lenKI), NU(lenNU), nuAll(maxreac,maxspec)
@@ -477,10 +492,10 @@ contains
     
   integer function CKELTXINSPY(eltID, spID)bind(C, name="CKELTXINSPY")
   
+    USE mod_chemdriver_defs, ONLY : maxelts 
+
     implicit none
       
-#include "cdwrk.H"
-
     integer eltID, spID
     integer NCF(maxelts,maxspec)
     CALL CKNCF(maxelts, IWRK(ckbi), RWRK(ckbr), NCF)
@@ -494,8 +509,6 @@ contains
   
     implicit none
       
-#include "cdwrk.H"
-
     GETCKNUMSPEC = Nspec
       
   end function GETCKNUMSPEC
@@ -504,10 +517,10 @@ contains
     
   integer function GETCKNUMELT()bind(C, name="GETCKNUMELT")
   
+    USE mod_chemdriver_defs, ONLY : Nelt
+
     implicit none
       
-#include "cdwrk.H"
-
     GETCKNUMELT = Nelt
       
   end function GETCKNUMELT
@@ -515,11 +528,11 @@ contains
 !------------------------------------  
   
   integer function get_CK_num_reac()bind(C, name="get_CK_num_reac")
+
+    USE mod_chemdriver_defs, ONLY : Nreac
   
     implicit none
       
-#include "cdwrk.H"
-
     get_CK_num_reac = Nreac
       
   end function get_CK_num_reac
@@ -530,8 +543,6 @@ contains
 
     implicit none
     double precision Ruc, Pa
-
-#include "cdwrk.H"
 
     call CKRP(IWRK(ckbi),RWRK(ckbr),RUNIV,Ruc,Pa)
 !     1 erg/(mole.K) = 1.e-4 J/(kmole.K)
@@ -546,8 +557,6 @@ contains
     implicit none
     double precision Ru, Ruc, Pa
 
-#include "cdwrk.H"
-
     call CKRP(IWRK(ckbi),RWRK(ckbr),Ru,Ruc,Pa)
 !     1 N/(m.m) = 0.1 dyne/(cm.cm)
     P1ATMMKS = Pa*1.d-1
@@ -558,9 +567,9 @@ contains
   
   integer function GETCKELTNAME(i, coded)bind(C, name="GETCKELTNAME")
   
-    implicit none
+    USE mod_chemdriver_defs, ONLY : maxelts 
 
-#include "cdwrk.H"
+    implicit none
 
     integer i
     integer coded(*)
@@ -584,8 +593,6 @@ contains
   
     implicit none
       
-#include "cdwrk.H"
-
     integer i
     integer coded(*)
     integer names(maxspec*maxspnml)
@@ -614,8 +621,6 @@ contains
     integer coded(*)
 
 #ifdef MIKE
-#include "cdwrk.H"
-
     character*(72) line 
     integer j, str_len, istr, iend, lout
     logical error
@@ -651,8 +656,6 @@ contains
   
     implicit none
       
-#include "cdwrk.H"
-
     integer i, j!, GETCKSPECNAME
     integer coded(maxspnml), len
     character*(maxspnml) name
@@ -672,8 +675,6 @@ contains
   
     implicit none
 
-#include "cdwrk.H"
-
     integer j, n
     character*(*) name
     character*(maxspnml) locName
@@ -692,7 +693,6 @@ contains
   
     implicit none
       
-#include "cdwrk.H"
 
     REAL_T mwt(*)
 !     Result in kg/kmole
@@ -705,7 +705,6 @@ contains
   subroutine FORT_GETCKAWT(awt)
 
     implicit none
-#include "cdwrk.H"
 
     REAL_T awt(*)
 !     Result in kg/kmole
@@ -717,7 +716,7 @@ contains
   subroutine FORT_GETCKCHRG(chrg)bind(C, name="FORT_GETCKCHRG")
 
      implicit none
-#include "cdwrk.H"
+
      integer chrg(*)
 
      call CKCHRG(IWRK(ckbi),RWRK(ckbr),chrg)
@@ -728,12 +727,11 @@ contains
 !------------------------------------  
   
   subroutine conpFY(N, TIME, Z, ZP, RPAR, IPAR)
+
+    USE mod_chemdriver_defs, ONLY : thickFacCH, NEQ, NP, NWT
   
     implicit none
       
-#include "cdwrk.H"
-#include "conp.H"
-
     REAL_T TIME, Z(NEQ), ZP(NEQ), RPAR(*)
     integer N, IPAR(*)
       
@@ -819,9 +817,6 @@ contains
     dimension FTEM(*)
     integer NFE
     
-#include "cdwrk.H"
-#include "conp.H"
-     
     call bl_abort("conpJY: SHOULD NOT BE HERE!")
       
   END subroutine conpJY
@@ -830,14 +825,14 @@ contains
   
   subroutine conpFY_sdc(N, TIME, Z, ZP, RPAR, IPAR)
 
+    USE mod_chemdriver_defs, ONLY : c_0, negative_Y_test, rhoh_INIT, T_cell, &
+                                    thickFacCH, NEQ, NWT, NWTI
+
 !
 !     Variables in Z are:  Z(1:K) = rhoY(K) [MKS]
 !                          Z(K+1) = RhoH    [MKS]
 
     implicit none
-
-#include "cdwrk.H"
-#include "conp.H"
 
     REAL_T TIME, Z(NEQ), ZP(NEQ), RPAR(*)
     integer N, IPAR(*)
@@ -886,8 +881,6 @@ contains
   
     implicit none
       
-#include "cdwrk.H"
-
     integer NiterMAX,Niter,n,NiterDAMP
     REAL_T T,ein,Y(*),errMAX,res(0:NiterMAX-1)
     REAL_T TMIN,TMAX,e
@@ -999,8 +992,6 @@ contains
              
       implicit none
       
-#include "cdwrk.H"
-
       REAL_T T,Y(*),Hin,errMax
 
       integer NiterMAX,Niter,NiterDAMP,ihitlo,ihithi

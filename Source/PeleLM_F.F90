@@ -13,6 +13,8 @@
 
 module PeleLM_F
 
+  USE mod_chemdriver_defs 
+
   implicit none
 
   private
@@ -24,15 +26,20 @@ module PeleLM_F
 contains
 
   subroutine set_scal_numb(DensityIn, TempIn, TracIn, RhoHIn, &
+#ifdef USE_EFIELD        
+                           nEIn, PhiVIn,&
+#endif
                            FirstSpecIn, LastSpecIn) &
                            bind(C, name="set_scal_numb")
 
     implicit none
 
-#include <cdwrk.H>
 #include <htdata.H>
 
     integer DensityIn, TempIn, TracIn, RhoHIn, FirstSpecIn, LastSpecIn
+#ifdef USE_EFIELD        
+    integer :: nEIn, PhiVIn
+#endif
 
 !
 ! ::: Remove SPACEDIM from the counter, since those spots contain the
@@ -46,6 +53,11 @@ contains
     FirstSpec = FirstSpecIn - BL_SPACEDIM + 1
     LastSpec = LastSpecIn - BL_SPACEDIM + 1
 
+#ifdef USE_EFIELD
+    nE = nEIn - BL_SPACEDIM + 1
+    PhiV = PhiVIn - BL_SPACEDIM + 1
+#endif
+
   end subroutine set_scal_numb
 
 !------------------------------------------
@@ -54,8 +66,6 @@ contains
 
     implicit none
 
-#include <cdwrk.H>
-#include <conp.H>
 #include <htdata.H>
 
     integer nVals,n,nVals1
@@ -92,8 +102,6 @@ contains
 
     implicit none
 
-#include <cdwrk.H>
-#include <conp.H>
 #include <htdata.H>
 
     integer nVals,n,nVals1
@@ -177,9 +185,6 @@ contains
 
     implicit none
 
-#include <cdwrk.H>
-#include <conp.H>
-
     typVal_Density = zero
     typVal_Temp    = zero
     typVal_RhoH    = zero
@@ -260,11 +265,11 @@ contains
 
   subroutine active_control(coft,time,dt,myproc,step,restart,usetemp)bind(C, name="active_control")
 
+  USE mod_bcs_defs
+
     implicit none
 
 #include <probdata.H>
-#include <cdwrk.H>
-#include <bc.H>
 
 !
 ! Just stuff in the calling sequence.

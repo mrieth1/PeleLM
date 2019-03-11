@@ -22,6 +22,8 @@
 
 module derive_PLM_2D
 
+  USE mod_chemdriver_defs, ONLY : Nspec, maxspec 
+
   implicit none
 
   private
@@ -42,7 +44,6 @@ contains
 ! ::: This routine will computes rho - sum (rho*Y)
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
     integer    lo(2), hi(2)
@@ -103,7 +104,6 @@ contains
 ! ::: This routine will computes sum (rhoYdot or Ydot)
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
     integer    lo(2), hi(2)
@@ -165,7 +165,6 @@ contains
 ! ::: This routine will derive rho*R*T
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
       
     integer    lo(2), hi(2)
@@ -228,8 +227,6 @@ contains
 
     implicit none
     
-#include <cdwrk.H>
-
     integer    lo(SDIM), hi(SDIM)
     integer    DIMDEC(x)
     integer    DIMDEC(dat)
@@ -278,8 +275,6 @@ contains
     use chem_driver_2D, only: MASSR_TO_CONC
                                
     implicit none
-
-#include <cdwrk.H>
 
     integer    lo(SDIM), hi(SDIM)
     integer    DIMDEC(C)

@@ -1,14 +1,4 @@
       !
-      ! Hardwired sizes.
-      !
-      integer, parameter :: maxreac  = 472
-      integer, parameter :: maxspec  = 72
-      integer, parameter :: maxelts  = 6
-      integer, parameter :: maxthrdb = 20
-      integer, parameter :: maxtp    = 3
-      integer, parameter :: maxsp    = 12
-      integer, parameter :: maxspnml = 16
-      !
       ! The only ChemKin stuff we need.
       !
       integer, parameter :: ckbi = 1
@@ -56,12 +46,6 @@
 
 !$omp threadprivate(/EGWORK/,/MCWORK/)
       !
-      ! Actual sizes
-      !
-      integer            Nelt, Nspec, Nreac, Nfit
-      common / ckdsize / Nelt, Nspec, Nreac, Nfit
-      save   / ckdsize /
-      !
       ! I/O
       !
       integer          LLINKMC
@@ -71,16 +55,6 @@
       integer verbose_vode, max_vode_subcycles, vode_itol
       common / ckdio1 / verbose_vode, max_vode_subcycles, vode_itol
       save   / ckdio1 /
-      !
-      ! Integrator
-      !
-      double precision  spec_scalY(maxspec), vode_rtol, vode_atol
-      common /vode1/ spec_scalY, vode_rtol, vode_atol
-      save /vode1/
-
-      double precision  thickFacCH
-      common / vode2 / thickFacCH
-      save   / vode2 /
       !            
       ! Transport library
       !
@@ -93,9 +67,3 @@
       save   / tran3 /
 
 
-      ! SDC additions
-      integer negative_Y_test
-      double precision c_0(maxspec+1), c_1(maxspec+1), rhoH_INIT, T_cell, rhoY_INIT(maxspec)
-      common /sdc_function/ c_0, c_1, rhoH_INIT, T_cell, rhoY_INIT, negative_Y_test
-      save /sdc_function/
-!$omp threadprivate(/sdc_function/)

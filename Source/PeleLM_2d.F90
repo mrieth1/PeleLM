@@ -23,6 +23,8 @@
 
 module PeleLM_2d
 
+  USE mod_chemdriver_defs, ONLY: maxspec, Nspec, IWRK, RWRK, ckbr, ckbi
+
   implicit none
 
   private
@@ -44,7 +46,6 @@ contains
 
     implicit none
 
-#include <cdwrk.H>
 #include <visc.H>
 #include <htdata.H>
 
@@ -117,7 +118,6 @@ contains
 
     implicit none
 
-#include <cdwrk.H>
 #include <visc.H>
 #include <htdata.H>
 
@@ -162,7 +162,6 @@ contains
 
     implicit none
 
-#include <cdwrk.H>
 #include <visc.H>
 #include <htdata.H>
 
@@ -197,7 +196,6 @@ contains
     use chem_driver_2D, only: HfromT
     implicit none
 
-#include <cdwrk.H>      
 
     integer lo(SDIM), hi(SDIM), dlo(SDIM), dhi(SDIM), Tbc(SDIM,2)
     integer lo_x(SDIM), hi_x(SDIM), dlo_x(SDIM), dhi_x(SDIM)
@@ -719,7 +717,6 @@ contains
     implicit none
 
 #include <visc.H>
-#include <cdwrk.H>      
 
     integer lo(SDIM),hi(SDIM)
     integer DIMDEC(T)
@@ -766,7 +763,6 @@ contains
     
     implicit none
 
-#include <cdwrk.H>
 #include <visc.H>
 #include <htdata.H>
 
@@ -1581,7 +1577,6 @@ contains
 
     implicit none
 
-#include <cdwrk.H>
 
     integer lo(SDIM), hi(SDIM), dlo(SDIM), dhi(SDIM), dir, Ybc(SDIM,2)
     integer DIMDEC(flux)
@@ -1918,7 +1913,6 @@ contains
 
     implicit none
 
-#include <cdwrk.H>      
 
     integer lo(SDIM), hi(SDIM), yc, Tc, hc, rc
     integer DIMDEC(S)
@@ -2169,7 +2163,6 @@ contains
 
     implicit none
 
-#include <cdwrk.H>
 
     integer lo(SDIM), hi(SDIM)
     integer dir

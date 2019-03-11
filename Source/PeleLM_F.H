@@ -21,6 +21,10 @@ extern "C" {
                           const int* Temp,
                           const int* Trac,
                           const int* RhoH,
+#ifdef USE_EFIELD								  
+								  const int* nE,	
+								  const int* PhiV,
+#endif
                           const int* FirstSpec,
                           const int* LastSpec);
     
@@ -65,6 +69,18 @@ extern "C" {
                          const int* dom_lo, const int* dom_hi,
                          const amrex::Real* dx, const amrex::Real* grd_lo,
                          const amrex::Real* time, const int* bc);
+
+#ifdef USE_EFIELD								  
+  void ne_fill (amrex::Real* data, ARLIM_P(data_lo), ARLIM_P(data_hi),
+                const int* dom_lo, const int* dom_hi,
+                const amrex::Real* dx, const amrex::Real* grd_lo,
+                const amrex::Real* time, const int* bc);
+
+  void phiv_fill (amrex::Real* data, ARLIM_P(data_lo), ARLIM_P(data_hi),
+                  const int* dom_lo, const int* dom_hi,
+                  const amrex::Real* dx, const amrex::Real* grd_lo,
+                  const amrex::Real* time, const int* bc);
+#endif
 
   void est_divu_dt(const int& flag,  const amrex::Real* divu_dt_factor,
                         const amrex::Real* dx, 

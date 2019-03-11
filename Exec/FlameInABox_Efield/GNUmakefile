@@ -57,7 +57,7 @@ fEXE_sources += Lu30sk_ExpeSpeelman.f
 Blocs   := .
 
 CEXE_sources +=
-F90EXE_sources += Prob_$(DIM)d.F90 Prob_F.F90
+F90EXE_sources += mod_bc_defs.F90 Prob_$(DIM)d.F90 Prob_F.F90
 CEXE_headers += 
 FEXE_headers += probdata.H Prob_F.H
 

@@ -1,7 +1,12 @@
-
 #include <MyProb_F.H>
 
 module prob_3D_module
+
+   USE mod_chemdriver_defs, ONLY : maxspec, maxspnml, Nspec, IWRK, RWRK, iN2
+   USE mod_bcs_defs, ONLY : dV_control, tbase_control, pseudo_gravity, bcinit, &
+                            ac_hist_file, cfix, changeMax_control, h_control, &
+                            coft_old, corr,controlVelMax, navg_pnts, scale_control, &
+                            sest, tau_control, V_in_old, zbase_control
 
   implicit none
 
@@ -13,6 +18,10 @@ module prob_3D_module
             temp_fill, rhoh_fill, vel_fill, all_chem_fill, &
             FORT_XVELFILL, FORT_YVELFILL, FORT_ZVELFILL, chem_fill, press_fill, &
             FORT_MAKEFORCE 
+
+#ifdef USE_EFIELD         
+  public :: ne_fill, phiv_fill
+#endif
 
 contains
 
@@ -38,6 +47,8 @@ contains
   
       
       use chem_driver, only: P1ATMMKS
+      USE mod_bcs_defs, ONLY: u_bc, v_bc, w_bc, rho_bc, T_bc, Y_bc, h_bc
+      USE mod_chemdriver_defs, ONLY : nchemdiag
       
       implicit none
       integer init, namlen
@@ -46,14 +57,11 @@ contains
       REAL_T problo(SDIM), probhi(SDIM)
 
 #include <probdata.H>
-#include <cdwrk.H>
 #include <htdata.H>
-#include <bc.H>
 #if defined(BL_DO_FLCT)
 #include <INFL_FORCE_F.H>
 #endif
 #include <visc.H>
-#include <conp.H>
 
 #ifdef DO_LMC_FORCE
 #include <forcedata.H>
@@ -609,11 +617,13 @@ contains
       use chem_driver, only: P1ATMMKS
       use chem_driver_3D, only: RHOfromPTY, HMIXfromTY
       use probspec_module, only: set_Y_from_Phi
+    USE mod_bcs_defs, ONLY: u_bc, v_bc, w_bc, rho_bc, T_bc, Y_bc, h_bc
+#ifdef USE_EFIELD    
+    USE mod_bcs_defs, ONLY: ne_bc, phiV_bc
+#endif
   
       implicit none
       
-#include <cdwrk.H>
-#include <bc.H>
 #include <probdata.H>
 #include <htdata.H>
 
@@ -703,8 +713,6 @@ contains
   integer function getZone(x, y,z)bind(C, name="getZone")
 
       implicit none
-#include <cdwrk.H>
-#include <bc.H>
 #include <probdata.H>
 
       REAL_T x, y, z
@@ -740,14 +748,14 @@ contains
   subroutine bcfunction(x,y,z,time,u,v,w,rho,Yl,T,h,dx,getuvw) &
                         bind(C, name="bcfunction")
 
+      USE mod_bcs_defs, ONLY: u_bc, v_bc, w_bc, rho_bc, T_bc, Y_bc, h_bc
+
       implicit none
 
       REAL_T x, y, z, time, u, v, w, rho, Yl(0:*), T, h, dx(SDIM)
       logical getuvw
 
-#include <cdwrk.H>
 #include <htdata.H>
-#include <bc.H>
 #include <probdata.H>
 
       integer n, zone, len
@@ -796,6 +804,70 @@ contains
       endif
   end subroutine bcfunction
 
+#ifdef USE_EFIELD  
+  subroutine bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_lcl,phiV_lcl,dx,getuvw) &
+                        bind(C, name="bcfunction_efield")
+
+      USE mod_bcs_defs, ONLY: u_bc, v_bc, w_bc, rho_bc, T_bc, Y_bc, h_bc
+      USE mod_bcs_defs, ONLY: ne_bc, phiV_bc
+
+      implicit none
+
+      REAL_T x, y, z, time, u, v, w, rho, Yl(0:*), T, h, ne_lcl, phiV_lcl, dx(SDIM)
+      logical getuvw
+
+#include <htdata.H>
+#include <probdata.H>
+
+      integer n, zone, len
+
+      if (.not. bcinit) then
+         call bl_abort('Need to initialize boundary condition function')
+      end if
+
+      len = len_trim(probtype)
+      
+      if ( (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW) &
+          .or. (probtype(1:len).eq.BL_PROB_PREMIXED_CONTROLLED_INFLOW) &
+          .or. (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW_FORCED)  &
+          .or. (probtype(1:len).eq.BL_PROB_PREMIXED_CONTROLLED_INFLOW_FORCED) ) then
+
+         zone = getZone(x,y,z)
+         rho = rho_bc(zone)
+         do n = 0, Nspec-1
+            Yl(n) = Y_bc(n,zone)
+         end do
+         T = T_bc(zone)
+         h = h_bc(zone)
+         ne_lcl = ne_bc(zone)
+         phiV_lcl = phiV_bc(zone)
+         
+         if (getuvw .eqv. .TRUE.) then
+            
+            u = zero
+            v = zero
+            if ( (probtype(1:len).eq.BL_PROB_PREMIXED_CONTROLLED_INFLOW) .or. &
+                (probtype(1:len).eq.BL_PROB_PREMIXED_CONTROLLED_INFLOW_FORCED) ) then               
+               w =  V_in + (time-tbase_control)*dV_control
+            else if ( (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW) .or. &
+                   (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW_FORCED) ) then
+               w = w_bc(zone)
+            endif
+         endif
+
+      else
+
+         write(6,*) 'No boundary condition for probtype = ', probtype(1:len)
+         write(6,*) 'Available: '
+         write(6,*) '            ',BL_PROB_PREMIXED_FIXED_INFLOW
+         write(6,*) '            ',BL_PROB_PREMIXED_CONTROLLED_INFLOW
+         write(6,*) '            ',BL_PROB_PREMIXED_FIXED_INFLOW_FORCED
+         write(6,*) '            ',BL_PROB_PREMIXED_CONTROLLED_INFLOW_FORCED
+         call bl_pd_abort(' ')
+      endif
+  end subroutine bcfunction_efield
+#endif
+
 ! ::: -----------------------------------------------------------
       
   subroutine init_data_new_mech (level,time,lo,hi,nscal, &
@@ -817,9 +889,7 @@ contains
       REAL_T   scal(DIMV(state),nscal)
       REAL_T   press(DIMV(press))
  
-#include <cdwrk.H>
 #include <htdata.H>
-#include <bc.H>
 #include <probdata.H>
  
       integer i, j, k, n
@@ -891,9 +961,12 @@ contains
                        delta,xlo,xhi) &
                        bind(C, name="init_data")
                        
+      USE mod_bcs_defs, ONLY: u_bc, v_bc, w_bc, rho_bc, T_bc, Y_bc, h_bc
       use chem_driver, only: P1ATMMKS
       use chem_driver_3D, only: RHOfromPTY, HMIXfromTY
       use chem_driver, only: get_spec_name
+      USE mod_chemdriver_defs, ONLY : typVal_Density, typVal_Temp, typVal_RhoH, typVal_Trac, &
+                                      typVal_Y, typVal_Vel, typVal_YMIN, typVal_YMAX
       
       implicit none
       integer    level,nscal
@@ -906,10 +979,7 @@ contains
       REAL_T    scal(DIMV(state),nscal)
       REAL_T   press(DIMV(press))
 
-#include <cdwrk.H>
-#include <conp.H>
 #include <htdata.H>
-#include <bc.H>
 #include <probdata.H>
 #if defined(BL_DO_FLCT)
 #include <INFL_FORCE_F.H>
@@ -1070,7 +1140,6 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       REAL_T  problo(SDIM)
       
 #include <probdata.H>
-#include <cdwrk.H>
 #include <htdata.H>
       integer i, j, k, n, Tid, RHid, YSid, YEid, ys, ye
       integer len
@@ -1441,8 +1510,6 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       REAL_T  delta(SDIM), xlo(SDIM), time
       REAL_T  den(DIMV(den))
 
-#include <cdwrk.H>
-#include <bc.H>
 #include <probdata.H>
       
       integer i, j, k
@@ -1647,8 +1714,6 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       REAL_T  delta(SDIM), xlo(SDIM), time
       REAL_T  temp(DIMV(temp))
 
-#include <cdwrk.H>
-#include <bc.H>
 #include <probdata.H>
       
       integer i, j, k
@@ -1794,8 +1859,6 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       REAL_T  delta(SDIM), xlo(SDIM), time
       REAL_T  rhoh(DIMV(rhoh))
 
-#include <cdwrk.H>
-#include <bc.H>
 #include <probdata.H>
       
       integer i, j, k
@@ -1907,6 +1970,298 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 
   end subroutine rhoh_fill
 !
+#ifdef USE_EFIELD  
+!c ::: -----------------------------------------------------------
+!c ::: This routine is called during a filpatch operation when
+!c ::: the patch to be filled falls outside the interior
+!c ::: of the problem domain.  You are requested to supply the
+!c ::: data outside the problem interior in such a way that the
+!c ::: data is consistant with the types of the boundary conditions
+!c ::: you specified in the C++ code.
+!c :::
+!c ::: NOTE:  you can assume all interior cells have been filled
+!c :::        with valid data.
+!c :::
+!c ::: INPUTS/OUTPUTS:
+!c :::
+!c ::: ne        <= ne array
+!c ::: lo,hi     => index extent of adv array
+!c ::: domlo,hi  => index extent of problem domain
+!c ::: delta     => cell spacing
+!c ::: xlo       => physical location of lower left hand
+!c :::              corner of temperature array
+!c ::: time      => problem evolution time
+!c ::: bc        => array of boundary flags bc(BL_SPACEDIM,lo:hi)
+!c ::: -----------------------------------------------------------
+
+  subroutine ne_fill  (ne_ar,DIMS(ne_ar),domlo,domhi,delta, &
+                         xlo,time,bc)&
+                         bind(C, name="ne_fill")
+
+      implicit none
+
+      integer DIMDEC(ne_ar), bc(SDIM,2)
+      integer domlo(SDIM), domhi(SDIM)
+      REAL_T  delta(SDIM), xlo(SDIM), time
+      REAL_T  ne_ar(DIMV(ne_ar))
+
+#include <probdata.H>
+      
+      integer i, j, k
+      integer ilo, ihi, jlo, jhi, klo, khi
+      REAL_T  z, y, x
+      REAL_T  u, v, w, rho, Yl(0:maxspec-1), T, h, ne_bc, phiv_bc
+
+      integer lo(SDIM), hi(SDIM)
+
+      lo(1) = ARG_L1(ne_ar)
+      lo(2) = ARG_L2(ne_ar)
+      lo(3) = ARG_L3(ne_ar)
+      hi(1) = ARG_H1(ne_ar)
+      hi(2) = ARG_H2(ne_ar)
+      hi(3) = ARG_H3(ne_ar)
+
+      ilo = max(lo(1),domlo(1))
+      jlo = max(lo(2),domlo(2))
+      klo = max(lo(3),domlo(3))
+      ihi = min(hi(1),domhi(1))
+      jhi = min(hi(2),domhi(2))
+      khi = min(hi(3),domhi(3))
+      
+      call filcc (ne_ar,DIMS(ne_ar),domlo,domhi,delta,xlo,bc)
+
+      if (bc(1,1).eq.EXT_DIR.and.lo(1).lt.domlo(1)) then
+         do i = lo(1), domlo(1)-1
+            x = (float(i)+.5)*delta(1)+domnlo(1)
+            do k = lo(3),hi(3)
+               z = (float(k)+.5)*delta(3)+domnlo(3)
+               do j = lo(2), hi(2)
+                  y = (float(j)+.5)*delta(2)+domnlo(2)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  ne_ar(i,j,k) = ne_bc
+               enddo
+            enddo
+         enddo
+      endif
+      
+      if (bc(1,2).eq.EXT_DIR.and.hi(1).gt.domhi(1)) then
+         do i = domhi(1)+1, hi(1)
+            x = (float(i)+.5)*delta(1)+domnlo(1)
+            do k = lo(3),hi(3)
+               z = (float(k)+.5)*delta(3)+domnlo(3)
+               do j = lo(2), hi(2)
+                  y = (float(j)+.5)*delta(2)+domnlo(2)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  ne_ar(i,j,k) = ne_bc
+               enddo
+            enddo
+         enddo
+      endif    
+
+      if (bc(2,1).eq.EXT_DIR.and.lo(2).lt.domlo(2)) then
+         do j = lo(2), domlo(2)-1
+            y = (float(j)+.5)*delta(2)+domnlo(2)
+            do k = lo(3),hi(3)
+               z = (float(k)+.5)*delta(3)+domnlo(3)
+               do i = lo(1), hi(1)
+                  x = (float(i)+.5)*delta(1)+domnlo(1)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  ne_ar(i,j,k) = ne_bc
+               enddo
+            enddo
+         enddo
+      endif    
+      
+      if (bc(2,2).eq.EXT_DIR.and.hi(2).gt.domhi(2)) then
+         do j = domhi(2)+1, hi(2)
+            y = (float(j)+.5)*delta(2)+domnlo(2)
+            do k = lo(3),hi(3)
+               z = (float(k)+.5)*delta(3)+domnlo(3)
+               do i = lo(1), hi(1)
+                  x = (float(i)+.5)*delta(1)+domnlo(1)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  ne_ar(i,j,k) = ne_bc
+               enddo
+            enddo
+         enddo
+      endif
+
+      if (bc(3,1).eq.EXT_DIR.and.lo(3).lt.domlo(3)) then
+         do k = lo(3), domlo(3)-1
+            z = (float(k)+.5)*delta(3)+domnlo(3)
+            do j = lo(2),hi(2)
+               y = (float(j)+.5)*delta(2)+domnlo(2)
+               do i = lo(1), hi(1)
+                  x = (float(i)+.5)*delta(1)+domnlo(1)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  ne_ar(i,j,k) = ne_bc
+               enddo
+            enddo
+         enddo
+      endif    
+      
+      if (bc(3,2).eq.EXT_DIR.and.hi(3).gt.domhi(3)) then
+         do k = domhi(3)+1, hi(3)
+            z = (float(k)+.5)*delta(3)+domnlo(3)
+            do j = lo(2),hi(2)
+               y = (float(j)+.5)*delta(2)+domnlo(2)
+               do i = lo(1), hi(1)
+                  x = (float(i)+.5)*delta(1)+domnlo(1)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  ne_ar(i,j,k) = ne_bc
+               enddo
+            enddo
+         enddo
+      endif
+
+  end subroutine ne_fill
+
+!c ::: -----------------------------------------------------------
+!c ::: This routine is called during a filpatch operation when
+!c ::: the patch to be filled falls outside the interior
+!c ::: of the problem domain.  You are requested to supply the
+!c ::: data outside the problem interior in such a way that the
+!c ::: data is consistant with the types of the boundary conditions
+!c ::: you specified in the C++ code.
+!c :::
+!c ::: NOTE:  you can assume all interior cells have been filled
+!c :::        with valid data.
+!c :::
+!c ::: INPUTS/OUTPUTS:
+!c :::
+!c ::: phiv_ar   <= phiV array
+!c ::: lo,hi     => index extent of adv array
+!c ::: domlo,hi  => index extent of problem domain
+!c ::: delta     => cell spacing
+!c ::: xlo       => physical location of lower left hand
+!c :::              corner of temperature array
+!c ::: time      => problem evolution time
+!c ::: bc        => array of boundary flags bc(BL_SPACEDIM,lo:hi)
+!c ::: -----------------------------------------------------------
+
+  subroutine phiv_fill  (phiv_ar,DIMS(phiv_ar),domlo,domhi,delta, &
+                         xlo,time,bc)&
+                         bind(C, name="phiv_fill")
+
+      implicit none
+
+      integer DIMDEC(phiv_ar), bc(SDIM,2)
+      integer domlo(SDIM), domhi(SDIM)
+      REAL_T  delta(SDIM), xlo(SDIM), time
+      REAL_T  phiv_ar(DIMV(phiv_ar))
+
+#include <probdata.H>
+      
+      integer i, j, k
+      integer ilo, ihi, jlo, jhi, klo, khi
+      REAL_T  z, y, x
+      REAL_T  u, v, w, rho, Yl(0:maxspec-1), T, h, ne_bc, phiv_bc
+
+      integer lo(SDIM), hi(SDIM)
+
+      lo(1) = ARG_L1(phiv_ar)
+      lo(2) = ARG_L2(phiv_ar)
+      lo(3) = ARG_L3(phiv_ar)
+      hi(1) = ARG_H1(phiv_ar)
+      hi(2) = ARG_H2(phiv_ar)
+      hi(3) = ARG_H3(phiv_ar)
+
+      ilo = max(lo(1),domlo(1))
+      jlo = max(lo(2),domlo(2))
+      klo = max(lo(3),domlo(3))
+      ihi = min(hi(1),domhi(1))
+      jhi = min(hi(2),domhi(2))
+      khi = min(hi(3),domhi(3))
+      
+      call filcc (phiv_ar,DIMS(phiv_ar),domlo,domhi,delta,xlo,bc)
+
+      if (bc(1,1).eq.EXT_DIR.and.lo(1).lt.domlo(1)) then
+         do i = lo(1), domlo(1)-1
+            x = (float(i)+.5)*delta(1)+domnlo(1)
+            do k = lo(3),hi(3)
+               z = (float(k)+.5)*delta(3)+domnlo(3)
+               do j = lo(2), hi(2)
+                  y = (float(j)+.5)*delta(2)+domnlo(2)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  phiv_ar(i,j,k) = phiv_bc
+               enddo
+            enddo
+         enddo
+      endif
+      
+      if (bc(1,2).eq.EXT_DIR.and.hi(1).gt.domhi(1)) then
+         do i = domhi(1)+1, hi(1)
+            x = (float(i)+.5)*delta(1)+domnlo(1)
+            do k = lo(3),hi(3)
+               z = (float(k)+.5)*delta(3)+domnlo(3)
+               do j = lo(2), hi(2)
+                  y = (float(j)+.5)*delta(2)+domnlo(2)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  phiv_ar(i,j,k) = phiv_bc
+               enddo
+            enddo
+         enddo
+      endif    
+
+      if (bc(2,1).eq.EXT_DIR.and.lo(2).lt.domlo(2)) then
+         do j = lo(2), domlo(2)-1
+            y = (float(j)+.5)*delta(2)+domnlo(2)
+            do k = lo(3),hi(3)
+               z = (float(k)+.5)*delta(3)+domnlo(3)
+               do i = lo(1), hi(1)
+                  x = (float(i)+.5)*delta(1)+domnlo(1)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  phiv_ar(i,j,k) = phiv_bc
+               enddo
+            enddo
+         enddo
+      endif    
+      
+      if (bc(2,2).eq.EXT_DIR.and.hi(2).gt.domhi(2)) then
+         do j = domhi(2)+1, hi(2)
+            y = (float(j)+.5)*delta(2)+domnlo(2)
+            do k = lo(3),hi(3)
+               z = (float(k)+.5)*delta(3)+domnlo(3)
+               do i = lo(1), hi(1)
+                  x = (float(i)+.5)*delta(1)+domnlo(1)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  phiv_ar(i,j,k) = phiv_bc
+               enddo
+            enddo
+         enddo
+      endif
+
+      if (bc(3,1).eq.EXT_DIR.and.lo(3).lt.domlo(3)) then
+         do k = lo(3), domlo(3)-1
+            z = (float(k)+.5)*delta(3)+domnlo(3)
+            do j = lo(2),hi(2)
+               y = (float(j)+.5)*delta(2)+domnlo(2)
+               do i = lo(1), hi(1)
+                  x = (float(i)+.5)*delta(1)+domnlo(1)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  phiv_ar(i,j,k) = phiv_bc
+               enddo
+            enddo
+         enddo
+      endif    
+      
+      if (bc(3,2).eq.EXT_DIR.and.hi(3).gt.domhi(3)) then
+         do k = domhi(3)+1, hi(3)
+            z = (float(k)+.5)*delta(3)+domnlo(3)
+            do j = lo(2),hi(2)
+               y = (float(j)+.5)*delta(2)+domnlo(2)
+               do i = lo(1), hi(1)
+                  x = (float(i)+.5)*delta(1)+domnlo(1)
+                  call bcfunction_efield(x,y,z,time,u,v,w,rho,Yl,T,h,ne_bc,phiV_bc,delta,.false.)
+                  phiv_ar(i,j,k) = phiv_bc
+               enddo
+            enddo
+         enddo
+      endif
+
+  end subroutine phiv_fill
+
+#endif
 ! Fill x, y & z velocity at once.
 !
   subroutine vel_fill  (vel,DIMS(vel),domlo,domhi,delta, &
@@ -1920,8 +2275,6 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       REAL_T  delta(SDIM), xlo(SDIM), time
       REAL_T  vel(DIMV(vel),SDIM)
 
-#include <cdwrk.H>
-#include <bc.H>
 #include <probdata.H>
 #if defined(BL_DO_FLCT)
 #include <INFL_FORCE_F.H>
@@ -2299,8 +2652,6 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       REAL_T  delta(SDIM), xlo(SDIM), time
       REAL_T  xvel(DIMV(xvel))
 
-#include <cdwrk.H>
-#include <bc.H>
 #include <probdata.H>
 #if defined(BL_DO_FLCT)
 #include <INFL_FORCE_F.H>
@@ -2529,8 +2880,6 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       REAL_T  delta(SDIM), xlo(SDIM), time
       REAL_T  yvel(DIMV(yvel))
 
-#include <cdwrk.H>
-#include <bc.H>
 #include <probdata.H>
 #if defined(BL_DO_FLCT)
 #include <INFL_FORCE_F.H>
@@ -2759,8 +3108,6 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       REAL_T  delta(SDIM), xlo(SDIM), time
       REAL_T  zvel(DIMV(zvel))
 
-#include <cdwrk.H>
-#include <bc.H>
 #include <probdata.H>
 #if defined(BL_DO_FLCT)
 #include <INFL_FORCE_F.H>
@@ -2956,8 +3303,6 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 
       implicit none
 
-#include <cdwrk.H>
-#include <bc.H>
 #include <probdata.H>
       
       integer DIMDEC(rhoY), bc(SDIM,2)
@@ -3126,8 +3471,6 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       REAL_T  delta(SDIM), xlo(SDIM), time
       REAL_T  rhoY(DIMV(rhoY))
 
-#include <cdwrk.H>
-#include <bc.H>
 #include <probdata.H>
       
       integer i, j, k
@@ -4293,8 +4636,6 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       REAL_T     kappa, kappaMax
 
 #include <probdata.H>
-#include <cdwrk.H>
-#include <bc.H>
 
 #ifdef DO_LMC_FORCE
 #include <forcedata.H>

@@ -168,6 +168,13 @@ Vector<Real> PeleLM::typical_values;
 int PeleLM::sdc_iterMAX;
 int PeleLM::num_mac_sync_iter;
 
+#ifdef USE_EFIELD
+int PeleLM::nE;
+int PeleLM::PhiV;
+int PeleLM::have_nE;
+int PeleLM::have_PhiV;
+#endif  
+
 static
 std::string
 to_upper (const std::string& s)
@@ -314,7 +321,7 @@ PeleLM::Initialize ()
   PeleLM::do_diffuse_sync           = 1;
   PeleLM::do_reflux_visc            = 1;
   PeleLM::dpdt_option               = 2;
-  PeleLM::RhoYdot_Type                 = -1;
+  PeleLM::RhoYdot_Type              = -1;
   PeleLM::FuncCount_Type            = -1;
   PeleLM::divu_ceiling              = 0;
   PeleLM::divu_dt_factor            = .5;
@@ -361,6 +368,14 @@ PeleLM::Initialize ()
 
   PeleLM::sdc_iterMAX               = 1;
   PeleLM::num_mac_sync_iter         = 1;
+
+#ifdef USE_EFIELD
+  PeleLM::nE                        = -1;
+  PeleLM::PhiV                      = -1;
+  PeleLM::have_nE                   = 0;
+  PeleLM::have_PhiV                 = 0;
+#endif
+
 
   ParmParse pp("ns");
 
@@ -933,6 +948,11 @@ PeleLM::init_once ()
   have_rhort = isStateVariable("RhoRT", dummy_State_Type, RhoRT);
   have_rhort = have_rhort && State_Type == dummy_State_Type;
 
+#ifdef USE_EFIELD
+  have_nE = isStateVariable("nE", dummy_State_Type, nE);
+  have_PhiV = isStateVariable("PhiV", dummy_State_Type, PhiV);
+#endif
+
   if (!have_temp)
     amrex::Abort("PeleLM::init_once(): RhoH & Temp must both be the state");
     
@@ -974,7 +994,11 @@ PeleLM::init_once ()
   //
   const int density = (int)Density;
 
-  set_scal_numb(&density, &Temp, &Trac, &RhoH, &first_spec, &last_spec);
+  set_scal_numb(&density, &Temp, &Trac, &RhoH, 
+#ifdef USE_EFIELD		  
+		  			 &nE, &PhiV,	
+#endif
+		          &first_spec, &last_spec);
   //
   // Load constants into Fortran common to compute viscosities, etc.
   //

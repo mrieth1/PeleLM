@@ -23,6 +23,9 @@
 
 module chem_driver_3D
 
+  USE mod_chemdriver_defs, ONLY : maxspnml, maxreac, maxspec, Nspec, IWRK, RWRK, &
+                                  ckbi, ckbr      
+
   implicit none
 
   private
@@ -42,7 +45,6 @@ contains
                        bind(C, name="norm_mass")
                        
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM)
       integer hi(SDIM)
       integer DIMDEC(Y)
@@ -74,8 +76,6 @@ contains
                        bind(C, name="FRrateXTP")
                        
       implicit none
-#include "cdwrk.H"
-#include "conp.H"
       integer lo(SDIM)
       integer hi(SDIM)
       integer DIMDEC(X)
@@ -133,10 +133,9 @@ contains
                    bind(C, name="HTRLS")
                    
       use chem_driver, only: conpFY_sdc
-      implicit none
+      USE mod_chemdriver_defs, ONLY : c_0, rhoY_INIT, rhoH_INIT, T_cell, NP
 
-#include "cdwrk.H"
-#include "conp.H"
+      implicit none
 
       integer lo(SDIM)
       integer hi(SDIM)
@@ -197,10 +196,9 @@ contains
                        bind(C, name="RRATERHOY")
                        
       use chem_driver, only: conpFY_sdc
-      implicit none
+      USE mod_chemdriver_defs, ONLY : c_0, c_1, rhoh_INIT, T_cell, NEQ
 
-#include "cdwrk.H"
-#include "conp.H"
+      implicit none
 
       integer lo(SDIM)
       integer hi(SDIM)
@@ -247,7 +245,6 @@ contains
                           bind(C, name="mass_to_mole")
                           
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM)
       integer hi(SDIM)
       integer DIMDEC(Y)
@@ -278,7 +275,6 @@ contains
                           bind(C, name="mole_to_mass")
               
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM)
       integer hi(SDIM)
       integer DIMDEC(X)
@@ -309,7 +305,6 @@ contains
                             bind(C, name="MASSTP_TO_CONC")
                             
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM)
       integer hi(SDIM)
       integer DIMDEC(Y)
@@ -346,7 +341,6 @@ contains
                            bind(C, name="MASSR_TO_CONC")
                            
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM)
       integer hi(SDIM)
       integer DIMDEC(Y)
@@ -382,7 +376,6 @@ contains
                           bind(C, name="CONC_TO_MOLE")
                           
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM)
       integer hi(SDIM)
       integer DIMDEC(C)
@@ -414,8 +407,9 @@ contains
                        Q, DIMS(Q), C, DIMS(C), T, DIMS(T) )&
                        bind(C, name="mole_prod")
                        
+      USE mod_chemdriver_defs, ONLY : Nreac              
+
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM), hi(SDIM), id
       integer DIMDEC(Q)
       integer DIMDEC(C)
@@ -454,8 +448,10 @@ contains
                          Celt, DIMS(Celt), C, DIMS(C))&
                          bind(C, name="GETELTMOLES")
                          
+      USE mod_chemdriver_defs, ONLY : Nelt, maxelts
+
       implicit none
-#include "cdwrk.H"
+
       integer lo(SDIM), hi(SDIM)
       integer namlen, maxlen
       integer namenc(namlen)
@@ -508,10 +504,14 @@ contains
                                 bind(C, name="CONPSOLV_SDC")
    
       use chem_driver
+   USE mod_chemdriver_defs, ONLY : c_0, c_1, rhoY_INIT, rhoH_INIT, T_cell, &
+                                   vode_itol, vode_rtol, vode_atol, typVal_RhoH, &
+                                   typVal_Y, typVal_Density, Nreac, NP, NEQ, &
+                                   negative_Y_test, nchemdiag, iN2, dvr, dvi, dvbr, &
+                                   dvbi 
+
       implicit none
 
-#include "cdwrk.H"
-#include "conp.H"
 #include "vode.H"
 
       integer lo(SDIM), hi(SDIM)
@@ -808,9 +808,9 @@ contains
   subroutine BETA_WBAR(lo, hi, RD, DIMS(RD), RD_Wbar, DIMS(RD_Wbar), Y, DIMS(Y)) &
                        bind(C, name="BETA_WBAR")
                        
-      implicit none
+      USE mod_chemdriver_defs, ONLY : MCRWRK, TMIN_TRANS, use_eg, use_mc                   
 
-#include "cdwrk.H"
+      implicit none
 
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(RD)
@@ -880,9 +880,10 @@ contains
                      bind(C, name="MIXAVG_RHODIFF_TEMP")
                
                
-      implicit none
+      USE mod_chemdriver_defs, ONLY : MCRWRK, TMIN_TRANS, use_eg, use_mc, &
+                                      EGRWRK, EGIWRK
 
-#include "cdwrk.H"
+      implicit none
 
       integer lo(SDIM), hi(SDIM), do_temp, do_VelVisc
       integer DIMDEC(RD)
@@ -995,9 +996,10 @@ contains
                             T, DIMS(T), Y, DIMS(Y))  &
                             bind(C, name="MIX_SHEAR_VISC")
                             
-      implicit none
+      USE mod_chemdriver_defs, ONLY : MCRWRK, TMIN_TRANS, use_eg, use_mc, &
+                                      EGRWRK, EGIWRK  
 
-#include "cdwrk.H"
+      implicit none
 
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(eta)
@@ -1059,8 +1061,6 @@ contains
                         
       implicit none
 
-#include "cdwrk.H"
-
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(RHO)
       integer DIMDEC(T)
@@ -1099,7 +1099,6 @@ contains
                          bind(C, name="RHOfromPvTY")
                          
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(RHO)
       integer DIMDEC(T)
@@ -1137,8 +1136,6 @@ contains
                       bind(C, name="PfromRTY")
                       
       implicit none
-
-#include "cdwrk.H"
 
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(P)
@@ -1179,7 +1176,6 @@ contains
                       bind(C, name="TfromPRY")
                       
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(RHO)
       integer DIMDEC(T)
@@ -1218,7 +1214,6 @@ contains
                          bind(C,name="CPMIXfromTY")
                          
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(CPMIX)
       integer DIMDEC(T)
@@ -1254,7 +1249,6 @@ contains
                          
       implicit none
       
-#include "cdwrk.H"
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(CVMIX)
       integer DIMDEC(T)
@@ -1288,8 +1282,6 @@ contains
                         bind(C, name="HMIXfromTY")
                         
       implicit none
-
-#include "cdwrk.H"
 
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(HMIX)
@@ -1325,8 +1317,6 @@ contains
   
       implicit none
 
-#include "cdwrk.H"
-
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(MWMIX)
       integer DIMDEC(Y)
@@ -1358,7 +1348,6 @@ contains
   
   
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(CP)
       integer DIMDEC(T)
@@ -1388,7 +1377,6 @@ contains
                     bind(C, name="HfromT")
                     
       implicit none
-#include "cdwrk.H"
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(H)
       integer DIMDEC(T)
@@ -1423,7 +1411,6 @@ contains
       use chem_driver, only: TfromHYpt
       implicit none
 
-#include "cdwrk.H"
 
       integer lo(SDIM), hi(SDIM)
       integer NiterMAX
@@ -1511,7 +1498,6 @@ contains
       use chem_driver, only: get_spec_name
       implicit none
       
-#include "cdwrk.H"
       integer lo(SDIM), hi(SDIM)
       integer DIMDEC(Qloss)
       integer DIMDEC(T)
