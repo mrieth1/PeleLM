@@ -240,6 +240,46 @@
 			   const amrex::Real* delta, const amrex::Real* xlo,
 			   const amrex::Real* time,  const amrex::Real* dt, const int* bcrec, 
                            const int* level, const int* grid_no) ;
+#ifdef USE_EFIELD
+     void derefieldx (amrex::Real* data, ARLIM_P(dat_lo), ARLIM_P(dat_hi),
+                      const int* nvar, const amrex::Real* compdat,
+                      ARLIM_P(clo), ARLIM_P(chi), const int* ncomp,
+                      const int* lo, const int* hi,
+                      const int* domain_lo, const int* domain_hi,
+                      const amrex::Real* delta, const amrex::Real* xlo,
+                      const amrex::Real* time,  const amrex::Real* dt, const int* bcrec,
+                      const int* level, const int* grid_no) ;
+
+     void derefieldy (amrex::Real* data, ARLIM_P(dat_lo), ARLIM_P(dat_hi),
+                      const int* nvar, const amrex::Real* compdat,
+                      ARLIM_P(clo), ARLIM_P(chi), const int* ncomp,
+                      const int* lo, const int* hi,
+                      const int* domain_lo, const int* domain_hi,
+                      const amrex::Real* delta, const amrex::Real* xlo,
+                      const amrex::Real* time,  const amrex::Real* dt, const int* bcrec,
+                      const int* level, const int* grid_no) ;
+
+#if (BL_SPACEDIM == 3)	  
+     void derefieldz (amrex::Real* data, ARLIM_P(dat_lo), ARLIM_P(dat_hi),
+                     const int* nvar, const amrex::Real* compdat,
+                     ARLIM_P(clo), ARLIM_P(chi), const int* ncomp,
+                     const int* lo, const int* hi,
+                     const int* domain_lo, const int* domain_hi,
+                     const amrex::Real* delta, const amrex::Real* xlo,
+                     const amrex::Real* time,  const amrex::Real* dt, const int* bcrec,
+                     const int* level, const int* grid_no) ;
+#endif
+
+     void derchargedist (amrex::Real* data, ARLIM_P(dat_lo), ARLIM_P(dat_hi),
+                        const int* nvar, const amrex::Real* compdat,
+                        ARLIM_P(clo), ARLIM_P(chi), const int* ncomp,
+                        const int* lo, const int* hi,
+                        const int* domain_lo, const int* domain_hi,
+                        const amrex::Real* delta, const amrex::Real* xlo,
+                        const amrex::Real* time,  const amrex::Real* dt, const int* bcrec,
+                        const int* level, const int* grid_no) ;
+#endif
+
 
 #ifdef __cplusplus
   }

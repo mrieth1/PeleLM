@@ -30,6 +30,10 @@ module derive_PLM_2D
  
   public :: drhomry, dsrhoydot, drhort, dermolefrac, derconcentration
 
+#ifdef USE_EFIELD  
+  public :: derchargedist, derefieldx, derefieldy
+#endif
+
 contains
  
   subroutine drhomry (e,DIMS(e),nv,dat,DIMS(dat),ncomp, &
@@ -316,5 +320,130 @@ contains
     enddo
 
   end subroutine derconcentration
+
+#ifdef USE_EFIELD  
+  SUBROUTINE derefieldx ( efieldx, DIMS(ef), nv, dat, DIMS(dat),ncomp, &
+                          lo,hi,domlo,domhi,delta,xlo,time,dt,bc, & 
+                          level,grid_no) bind(C, name="derefieldx")
+
+     IMPLICIT NONE
+
+!    Gradient of electric potential in X direction 
+     integer lo(2), hi(2)
+     integer DIMDEC(ef)
+     integer DIMDEC(dat)
+     integer domlo(2), domhi(2)
+     integer nv, ncomp
+     integer bc(2,2,ncomp)
+     REAL_T  delta(2), xlo(2), time, dt
+     REAL_T  efieldx(DIMV(ef),nv)
+     REAL_T  dat(DIMV(dat),ncomp)
+     integer level, grid_no
+
+     CALL FORT_EFIELD_DIR ( dat, DIMS(dat), efieldx, DIMS(ef), &
+                            lo, hi, 0, delta(1) )    
+
+  END SUBROUTINE derefieldx
+
+  SUBROUTINE derefieldy ( efieldy, DIMS(ef), nv, dat, DIMS(dat),ncomp, &
+                          lo,hi,domlo,domhi,delta,xlo,time,dt,bc, & 
+                          level,grid_no) bind(C, name="derefieldy")
+
+     IMPLICIT NONE
+
+!    Gradient of electric potential in X direction 
+     integer lo(2), hi(2)
+     integer DIMDEC(ef)
+     integer DIMDEC(dat)
+     integer domlo(2), domhi(2)
+     integer nv, ncomp
+     integer bc(2,2,ncomp)
+     REAL_T  delta(2), xlo(2), time, dt
+     REAL_T  efieldy(DIMV(ef),nv)
+     REAL_T  dat(DIMV(dat),ncomp)
+     integer level, grid_no
+
+     CALL FORT_EFIELD_DIR ( dat, DIMS(dat), efieldy, DIMS(ef), &
+                            lo, hi, 1, delta(2) )    
+
+  END SUBROUTINE derefieldy
+
+  SUBROUTINE FORT_EFIELD_DIR ( phi, DIMS(phi), ef, DIMS(ef), lo, hi, dir, dx)
+
+     IMPLICIT NONE
+
+!    compute a node centered pressure gradient in direction (dir)
+     integer    DIMDEC(phi)
+     integer    DIMDEC(ef)
+     integer    lo(SDIM),  hi(SDIM)
+     integer    dir
+     REAL_T     dx
+     REAL_T     phi(DIMV(phi))
+     REAL_T     ef(DIMV(ef))
+     integer    i,j
+     REAL_T     d
+
+#if (BL_PRVERSION == 9)
+     d = half
+#else
+     d = half/dx
+#endif
+
+     if (dir .eq. 0) then
+        do j = lo(2), hi(2)
+           do i = lo(1), hi(1)
+              ef(i,j) = -d*(phi(i+1,j)-phi(i,j)+phi(i+1,j+1)-phi(i,j+1))
+           end do
+        end do 
+     else if (dir .eq. 1) then
+        do j = lo(2), hi(2)
+           do i = lo(1), hi(1)
+              ef(i,j) = -d*(phi(i,j+1)-phi(i,j)+phi(i+1,j+1)-phi(i+1,j))
+           end do
+        end do
+     else
+        CALL bl_abort("FORT_EFIELD_DIR: invalid dir")
+     end if
+
+
+  END SUBROUTINE FORT_EFIELD_DIR   
+  
+
+  SUBROUTINE derchargedist( Cdist ,DIMS(Cdist), nv, dat, DIMS(dat), ncomp, &
+                            lo, hi, domlo, domhi, delta, xlo, time, dt, bc, &
+                            level, grid_no ) bind(C, name="derchargedist")
+
+    USE mod_chemdriver_defs, ONLY : zk, CperECharge
+
+    IMPLICIT NONE
+
+    integer    lo(SDIM), hi(SDIM)
+    integer    DIMDEC(Cdist)
+    integer    DIMDEC(dat)
+    integer    domlo(SDIM), domhi(SDIM)
+    integer    nv, ncomp
+    integer    bc(SDIM,2,ncomp)
+    REAL_T     delta(SDIM), xlo(SDIM), time, dt
+    REAL_T     Cdist(DIMV(Cdist),nv)
+    REAL_T     dat(DIMV(dat),ncomp)
+    integer    level, grid_no
+
+    integer i,j,n
+    integer fS,inE
+    integer lo_chem(SDIM),hi_chem(SDIM)
+    data lo_chem /1,1/
+    data hi_chem /1,1/
+
+    inE = 1 
+    fS  = 2
+
+    do j=lo(2),hi(2)
+       do i=lo(1),hi(1)
+          Cdist(i,j,1) = SUM(zk(1:Nspec) * dat(i,j,fS:fS+Nspec-1)) - dat(i,j,inE) * CperECharge
+       enddo
+    enddo
+
+  END SUBROUTINE derchargedist
+#endif
 
 end module derive_PLM_2D

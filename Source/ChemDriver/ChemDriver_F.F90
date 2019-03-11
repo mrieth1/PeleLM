@@ -157,7 +157,11 @@ contains
     USE mod_chemdriver_defs, ONLY : verbose_vode, max_vode_subcycles, spec_scalY, thickFacCH, &
                                     eg_nodes, Nreac, Nfit, Nelt, dvr, dvbr, dvi, dvdr, dvdbr, dvbi, &
                                     dvder, use_eg, use_mc, EGIWRK, EGRWRK, MCRWRK, MCIWRK, eg_IFLAG, &
-                                    eg_ITLS, LLINKMC, MAXTP, NEQ, NRHO, NP, NWT, NWTI, NZ, iN2, iE_sp
+                                    eg_ITLS, LLINKMC, MAXTP, NEQ, NRHO, NP, NWT, NWTI, NZ, iN2
+#ifdef USE_EFIELD      
+    USE mod_chemdriver_defs, ONLY : spec_charge, Na, CperECharge, zk, invmwt, iE_sp
+#endif
+                                 
 
     implicit none
 
@@ -292,19 +296,28 @@ contains
       call get_spec_name(name,n)
       if (name .eq. 'N2' ) iN2 = n
     end do
-    if (iN2.eq.-1) &
-        write(6,*) '.....warning: no N2 in chemistry species list'
+    if (iN2.eq.-1) write(6,*) '.....warning: no N2 in chemistry species list'
 
 #ifdef USE_EFIELD      
-    !
-    ! Find E in species list.
-    !
+!##############################
+!   A few allocs for efield
+    ALLOCATE(zk(1:Nspec))
+    ALLOCATE(invmwt(1:Nspec))
+    ALLOCATE(spec_charge(1:Nspec))
+
+!   Compute const variables    
+    CALL CKCHRG(IWRK(ckbi), RWRK(ckbr), spec_charge(1))
+    invmwt(:) = RWRK(NWTI:NWTI+Nspec-1)
+    zk(:) = CperECharge * Na * spec_charge(:) * invmwt(:)
+
+!   Find E species index
     iE_sp = -1
     DO n = 1, Nspec
        CALL get_spec_name(name,n)
        IF ( name .eq. 'E' ) iE_sp = n
     END DO
     IF (iE_sp == -1) WRITE(6,*) ' .... WARNING: USE_EFIELD = TRUE but no electron found in the chem model !'
+!##############################
 #endif
 
   end subroutine INITCHEM
@@ -314,6 +327,10 @@ contains
   subroutine finalize_chem()bind(C, name="finalize_chem")
 
     USE mod_chemdriver_defs, ONLY : EGRWRK, EGIWRK, MCRWRK, MCIWRK 
+
+#ifdef USE_EFIELD      
+    USE mod_chemdriver_defs, ONLY : spec_charge, zk, invmwt
+#endif
  
     implicit none
 
@@ -342,6 +359,12 @@ contains
     deallocate(RWRK)
     deallocate(IWRK)
 !$omp end parallel
+
+#ifdef USE_EFIELD      
+    DEALLOCATE(zk)
+    DEALLOCATE(invmwt)
+    DEALLOCATE(spec_charge)
+#endif
 
     call CKFINALIZE();
 

@@ -949,4 +949,43 @@ contains
 #endif
   end subroutine FORT_DERFORCEZ
 
+#ifdef USE_EFIELD  
+  SUBROUTINE derchargedist( Cdist ,DIMS(Cdist), nv, dat, DIMS(dat), ncomp, &
+                            lo, hi, domlo, domhi, delta, xlo, time, dt, bc, &
+                            level, grid_no ) bind(C, name="derchargedist")
+
+    USE mod_chemdriver_defs, ONLY : zk, CperECharge
+
+    IMPLICIT NONE
+
+    integer    lo(SDIM), hi(SDIM)
+    integer    DIMDEC(Cdist)
+    integer    DIMDEC(dat)
+    integer    domlo(SDIM), domhi(SDIM)
+    integer    nv, ncomp
+    integer    bc(SDIM,2,ncomp)
+    REAL_T     delta(SDIM), xlo(SDIM), time, dt
+    REAL_T     Cdist(DIMV(Cdist),nv)
+    REAL_T     dat(DIMV(dat),ncomp)
+    integer    level, grid_no
+
+    integer i,j,n
+    integer fS,inE
+    integer lo_chem(SDIM),hi_chem(SDIM)
+    data lo_chem /1,1/
+    data hi_chem /1,1/
+
+    inE = 1 
+    fS  = 2
+
+    do j=lo(2),hi(2)
+       do i=lo(1),hi(1)
+          Cdist(i,j,1) = SUM(zk(1:Nspec) * dat(i,j,fS:fS+Nspec-1)) - dat(i,j,inE) * CperECharge
+       enddo
+    enddo
+
+  END SUBROUTINE derchargedist
+
+#endif
+
 end module derive_PLM_3D

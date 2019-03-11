@@ -950,6 +950,29 @@ PeleLM::variableSetUp ()
   //
   //err_list.add("total_particle_count",1,ErrorRec::Special,part_cnt_err);
 #endif
+#ifdef USE_EFIELD  
+  //
+  //  The charge distributino
+  //
+  derive_lst.add("chargedistrib",IndexType::TheCellType(),1,derchargedist,the_same_box);
+  derive_lst.addComponent("chargedistrib",desc_lst,State_Type,nE,1);
+  derive_lst.addComponent("chargedistrib",desc_lst,State_Type,FirstSpec,nspecies);
+  //
+  //  The electric field components
+  //
+  derive_lst.add("efieldx",IndexType::TheCellType(),1,derefieldx,grow_box_by_one);
+  derive_lst.addComponent("efieldx",desc_lst,State_Type,PhiV,1);
+
+  derive_lst.add("efieldy",IndexType::TheCellType(),1,derefieldy,grow_box_by_one);
+  derive_lst.addComponent("efieldy",desc_lst,State_Type,PhiV,1);
+
+#if (BL_SPACEDIM == 3)
+  derive_lst.add("efieldz",IndexType::TheCellType(),1,derefieldz,grow_box_by_one);
+  derive_lst.addComponent("efieldz",desc_lst,State_Type,PhiV,1);
+#endif
+
+#endif
+
   //
   // **************  DEFINE ERROR ESTIMATION QUANTITIES  *************
   //
