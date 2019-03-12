@@ -42,8 +42,10 @@ MODULE mod_chemdriver_defs
 #include <cdwrk.H>  
 
 #ifdef USE_EFIELD
-   DOUBLE PRECISION, PARAMETER :: Na = 6.022d23
-   DOUBLE PRECISION, PARAMETER :: CperECharge = 1.60217662d-19
+   DOUBLE PRECISION, PARAMETER :: Na = 6.022d23                   ! Avogadro's number
+   DOUBLE PRECISION, PARAMETER :: CperECharge = 1.60217662d-19    ! Coulomb per charge
+   DOUBLE PRECISION, PARAMETER :: e0 = 8.854187817d-12            ! Free space permittivity (C/(V.m))
+   DOUBLE PRECISION, PARAMETER :: er = 1.d0                       ! Relative permittivity of air
    DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: zk
    DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: invmwt
    INTEGER, DIMENSION(:), ALLOCATABLE :: spec_charge

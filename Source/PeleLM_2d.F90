@@ -36,6 +36,10 @@ module PeleLM_2d
              incrwext_flx_div, flux_div, compute_ugradp, conservative_T_floor, &
              htdd_relax, part_cnt_err, mcurve, smooth, grad_wbar, recomp_update
 
+#ifdef USE_EFIELD          
+  public ::  ef_calc_rhs_poisson
+#endif
+
 contains
 
   subroutine calc_divu_fortran(lo, hi, &
@@ -2261,5 +2265,36 @@ contains
     end do
 
   end subroutine recomp_update
+
+
+#ifdef USE_EFIELD
+  subroutine ef_calc_rhs_poisson(lo, hi, rhs, DIMS(rhs), &
+                                 rhoY, DIMS(rhoY), ne_ar, DIMS(ne_ar)) &
+                                 bind(C, name="ef_calc_rhs_poisson")
+
+    USE mod_chemdriver_defs, ONLY : zk, CperECharge, e0, er                         
+
+    implicit none
+
+    integer lo(SDIM),hi(SDIM)
+    integer DIMDEC(rhs)
+    integer DIMDEC(rhoY)
+    integer DIMDEC(ne_ar)
+    REAL_T  rhs(DIMV(rhs))
+    REAL_T  rhoY(DIMV(rhoY),1:Nspec)
+    REAL_T  ne_ar(DIMV(ne_ar))
+      
+    integer :: i, j
+    REAL_T :: factor_rhs
+
+    factor_rhs = 1.0d0 / ( e0 * er )
+    do j=lo(2),hi(2)
+       do i=lo(1),hi(1)
+          rhs(i,j) = (SUM(zk(1:Nspec) * rhoY(i,j,1:Nspec)) - ne_ar(i,j) * CperECharge ) * factor_rhs
+       enddo
+    enddo
+
+  end subroutine ef_calc_rhs_poisson
+#endif  
 
 end module PeleLM_2d

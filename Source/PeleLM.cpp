@@ -169,10 +169,14 @@ int PeleLM::sdc_iterMAX;
 int PeleLM::num_mac_sync_iter;
 
 #ifdef USE_EFIELD
-int PeleLM::nE;
-int PeleLM::PhiV;
-int PeleLM::have_nE;
-int PeleLM::have_PhiV;
+int  PeleLM::nE;
+int  PeleLM::PhiV;
+int  PeleLM::have_nE;
+int  PeleLM::have_PhiV;
+Real PeleLM::ef_phiV_tol;
+int  PeleLM::ef_PoissonMaxIter;
+int  PeleLM::ef_PoissonVerbose;
+int  PeleLM::ef_PoissonMaxOrder;
 #endif  
 
 static
@@ -369,14 +373,6 @@ PeleLM::Initialize ()
   PeleLM::sdc_iterMAX               = 1;
   PeleLM::num_mac_sync_iter         = 1;
 
-#ifdef USE_EFIELD
-  PeleLM::nE                        = -1;
-  PeleLM::PhiV                      = -1;
-  PeleLM::have_nE                   = 0;
-  PeleLM::have_PhiV                 = 0;
-#endif
-
-
   ParmParse pp("ns");
 
   pp.query("do_diffuse_sync",do_diffuse_sync);
@@ -520,6 +516,10 @@ PeleLM::Initialize ()
     }
 
   }
+
+#ifdef USE_EFIELD
+  ef_init();	
+#endif
 
 #ifdef AMREX_PARTICLES
   read_particle_params();
@@ -2124,6 +2124,14 @@ PeleLM::post_init (Real stop_time)
     }
   }
 
+#ifdef USE_EFIELD  
+  //
+  // Compute a elec. potential consistent with current state
+  //
+  amrex::Print() << "Doing initial phiV solve \n";
+  ef_solve_phiv(cur_time) ;
+#endif
+  
   //
   // Estimate the initial timestepping.
   //

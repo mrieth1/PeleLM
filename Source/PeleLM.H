@@ -5,6 +5,7 @@
 #include <AMReX_AuxBoundaryData.H>
 #include <NavierStokesBase.H>
 #include <ChemDriver.H>
+#include <AMReX_MLMG.H>
 
 #include <list>
 #include <map>
@@ -489,10 +490,7 @@ private:
   static int nGrowAdvForcing;
 
 #ifdef USE_EFIELD
-  static int         nE;
-  static int         PhiV;
-  static int         have_nE;
-  static int         have_PhiV;
+#include <PeleLM_efield.H>  
 #endif  
 
 };
