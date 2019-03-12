@@ -631,6 +631,7 @@ contains
     REAL_T Patm, pmf_vals(maxspec+3), a
     REAL_T Xt(maxspec), Yt(maxspec), loc
     integer zone, n, fuelZone, airZone, region
+    integer inletzone, outletzone
     integer b(SDIM)
     integer num_zones_defined, len
     data  b / 1, 1 /
@@ -645,22 +646,24 @@ contains
          
 !     Take fuel mixture from prob data
 
-      zone = getZone(domnlo(1), domnlo(2))
-      num_zones_defined = 1
+      inletzone = getZone(domnlo(1), domnlo(2))
+      outletzone = getZone(domnhi(1), domnhi(2))
+      num_zones_defined = 2
            
       if (phi_in.gt.zero) then
   
         call set_Y_from_Phi(phi_in,Yt)
         do n=1,Nspec
-          Y_bc(n-1,zone) = Yt(n)
+          Y_bc(n-1,inletzone) = Yt(n)
         end do
-        T_bc(zone) = T_in
-        u_bc(zone) = zero
-        v_bc(zone) = V_in
+        T_bc(inletzone) = T_in
+        u_bc(inletzone) = zero
+        v_bc(inletzone) = V_in
 
 #ifdef USE_EFIELD        
-        ne_bc(zone) = 0.0d0
-        phiV_bc(zone) = 0.0d0
+        ne_bc(inletzone) = 0.0d0
+        phiV_bc(inletzone) = 0.0d0
+        phiV_bc(outletzone) = 1.0d0
 #endif
   
       else 
@@ -679,17 +682,23 @@ contains
         CALL CKXTY (Xt, IWRK, RWRK, Yt)
   
         do n=1,Nspec
-          Y_bc(n-1,zone) = Yt(n)
+          Y_bc(n-1,inletzone) = Yt(n)
         end do
         
-        T_bc(zone) = pmf_vals(1)
-        u_bc(zone) = zero
+        T_bc(inletzone) = pmf_vals(1)
+        u_bc(inletzone) = zero
         if (V_in .lt. 0) then
-          v_bc(zone) = pmf_vals(2)*1.d-2
+          v_bc(inletzone) = pmf_vals(2)*1.d-2
         else
-          v_bc(zone) = V_in
+          v_bc(inletzone) = V_in
         endif
               
+#ifdef USE_EFIELD        
+        ne_bc(inletzone) = 0.0d0
+        phiV_bc(inletzone) = 0.0d0
+        phiV_bc(outletzone) = 1.0d0
+#endif
+
       endif
 
     else if (probtype(1:len).eq.BL_PROB_DIFFUSION) then
@@ -782,7 +791,11 @@ contains
     if ( (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW) &
           .or. (probtype(1:len).eq.BL_PROB_PREMIXED_CONTROLLED_INFLOW) ) then
 
-      getZone = BL_FUELPIPE
+      if (y .ge. splity) then      
+        getZone = BL_AMBIENT
+      else
+        getZone = BL_FUELPIPE
+      endif
          
     else if (probtype(1:len).eq.BL_PROB_DIFFUSION) then
          
@@ -939,6 +952,8 @@ contains
          end do
          T = T_bc(zone)
          h = h_bc(zone)
+         ne_lcl = ne_bc(zone)
+         phiV_lcl = phiV_bc(zone)
          
          if (getuv .eqv. .TRUE.) then
             u = zero
@@ -2132,6 +2147,8 @@ contains
 
       call filcc (phiV_ar,DIMS(phiV_ar),domlo,domhi,delta,xlo,bc)
 
+
+!     x low      
       if (bc(1,1).eq.EXT_DIR.and.lo(1).lt.domlo(1)) then
          do i = lo(1), domlo(1)-1
             x = (float(i)+.5)*delta(1)+domnlo(1)
