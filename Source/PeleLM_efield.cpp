@@ -45,6 +45,7 @@ void PeleLM::ef_solve_phiv(Real time) {
 	MultiFab&  S = get_new_data(State_Type);
 	MultiFab rhs_poisson(grids,dmap,1,nGrowAdvForcing);
 
+// Use FillPatchIterator (FPI) to update the data in the growth cell and copy back into S
 	FillPatchIterator PhiVfpi(*this,S,1,time,State_Type,PhiV,1);
 	MultiFab& PhiVmf = PhiVfpi.get_mf();
 	MultiFab::Copy(S,PhiVmf,0,PhiV,1,1);
