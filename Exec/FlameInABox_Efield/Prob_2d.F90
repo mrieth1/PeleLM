@@ -1081,7 +1081,8 @@ contains
       use chem_driver_2D, only: RHOfromPTY, HMIXfromTY
       use chem_driver, only: get_spec_name
       USE mod_chemdriver_defs, ONLY : typVal_Density, typVal_Temp, typVal_RhoH, typVal_Trac, &
-                                      typVal_Y, typVal_Vel, typVal_YMIN, typVal_YMAX
+                                      typVal_Y, typVal_Vel, typVal_YMIN, typVal_YMAX, iN2, iE_sp, &
+                                      Na, invmwt
 
       implicit none
       integer    level, nscal
@@ -1146,6 +1147,15 @@ contains
                end do 
                
                CALL CKXTY (Xl, IWRK, RWRK, Yl)
+
+#ifdef USE_EFIELD
+!              Clean the iE_sp field and init nE component               
+!              Does not ensure electro-neutral conditions for now ...
+               Yl(iN2) =  Yl(iN2) + Yl(iE_sp)
+               scal(i,j,nE) = Yl(iE_sp)
+               Yl(iE_sp) = 0.0d0
+               scal(i,j,PhiV) = 0.d0
+#endif
                
                do n = 1,Nspec
                   scal(i,j,FirstSpec+n-1) = Yl(n)
@@ -1309,6 +1319,9 @@ contains
                scal(i,j,FirstSpec+n) = scal(i,j,FirstSpec+n)*scal(i,j,Density)
             enddo
             scal(i,j,RhoH) = scal(i,j,RhoH)*scal(i,j,Density)
+#ifdef USE_EFIELD
+            scal(i,j,nE) = scal(i,j,nE) * scal(i,j,Density) * invmwt(iE_sp) * Na
+#endif
          enddo
       enddo
 
