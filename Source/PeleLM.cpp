@@ -925,6 +925,10 @@ PeleLM::define_data ()
   // this will hold the transport coefficients for Wbar
   diffWbar_cc.define(grids,dmap,nspecies,1);
 #endif
+
+#ifdef USE_EFIELD  
+  ef_define_data();
+#endif
 }
 
 void
@@ -2126,9 +2130,9 @@ PeleLM::post_init (Real stop_time)
 
 #ifdef USE_EFIELD  
   //
-  // Compute a elec. potential consistent with current state
+  // Compute an elec. potential consistent with initial state
   //
-  amrex::Print() << "Doing initial phiV solve \n";
+  amrex::Print() << " Doing initial phiV solve \n";
   ef_solve_phiv(cur_time) ;
 #endif
   
@@ -4093,6 +4097,7 @@ PeleLM::advance_setup (Real time,
 {
   NavierStokesBase::advance_setup(time, dt, iteration, ncycle);
 
+//Update all the states    
   for (int k = 0; k < num_state_type; k++)
   {
     MultiFab& nstate = get_new_data(k);
@@ -4107,6 +4112,10 @@ PeleLM::advance_setup (Real time,
 
 #ifdef USE_WBAR
   calcDiffusivity_Wbar(time);
+#endif
+
+#ifdef USE_EFIELD  
+  ef_advance_setup(time);
 #endif
 
   if (plot_reactions && level == 0)
@@ -4449,6 +4458,9 @@ PeleLM::advance (Real time,
 #ifdef USE_WBAR
       calcDiffusivity_Wbar(cur_time);
 #endif
+#ifdef USE_EFIELD
+		ef_calc_transport(cur_time);	
+#endif		
       BL_PROFILE_VAR_STOP(HTDIFF);
 
       // compute Dnp1 and DDnp1
@@ -4664,35 +4676,35 @@ PeleLM::advance (Real time,
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
-  {
-    for (MFIter mfi(Forcing,true); mfi.isValid(); ++mfi) 
     {
-      const Box& box = mfi.tilebox();
-      FArrayBox& f = Forcing[mfi];
-      const FArrayBox& a = (*aofs)[mfi];
-      const FArrayBox& r = get_new_data(RhoYdot_Type)[mfi];
-      const FArrayBox& dn = Dn[mfi];
-      const FArrayBox& ddn = DDn[mfi];
-      const FArrayBox& dnp1 = Dnp1[mfi];
-      const FArrayBox& ddnp1 = DDnp1[mfi];
-
-      f.copy(dn,box,0,box,0,nspecies+1); // copy Dn into RhoY and RhoH
-      f.minus(dnp1,box,box,0,0,nspecies+1); // subtract Dnp1 from RhoY and RhoH
-      f.plus(ddn  ,box,box,0,nspecies,1); // add DDn to RhoH, no contribution for RhoY
-      f.plus(ddnp1,box,box,0,nspecies,1); // add DDnp1 to RhoH, no contribution for RhoY
-      f.mult(0.5,box,0,nspecies+1);
-#ifdef USE_WBAR
-      const FArrayBox& dwbar = DWbar[mfi];
-      f.plus(dwbar,box,box,0,0,nspecies); // add DWbar to RhoY
-#endif
-      if (closed_chamber == 1)
+      for (MFIter mfi(Forcing,true); mfi.isValid(); ++mfi) 
       {
-        f.plus(dp0dt,nspecies,1); // add dp0/dt to enthalpy forcing
+        const Box& box = mfi.tilebox();
+        FArrayBox& f = Forcing[mfi];
+        const FArrayBox& a = (*aofs)[mfi];
+        const FArrayBox& r = get_new_data(RhoYdot_Type)[mfi];
+        const FArrayBox& dn = Dn[mfi];
+        const FArrayBox& ddn = DDn[mfi];
+        const FArrayBox& dnp1 = Dnp1[mfi];
+        const FArrayBox& ddnp1 = DDnp1[mfi];
+  
+        f.copy(dn,box,0,box,0,nspecies+1); // copy Dn into RhoY and RhoH
+        f.minus(dnp1,box,box,0,0,nspecies+1); // subtract Dnp1 from RhoY and RhoH
+        f.plus(ddn  ,box,box,0,nspecies,1); // add DDn to RhoH, no contribution for RhoY
+        f.plus(ddnp1,box,box,0,nspecies,1); // add DDnp1 to RhoH, no contribution for RhoY
+        f.mult(0.5,box,0,nspecies+1);
+#ifdef USE_WBAR
+        const FArrayBox& dwbar = DWbar[mfi];
+        f.plus(dwbar,box,box,0,0,nspecies); // add DWbar to RhoY
+#endif
+        if (closed_chamber == 1)
+        {
+          f.plus(dp0dt,nspecies,1); // add dp0/dt to enthalpy forcing
+        }
+        f.plus(a,box,box,first_spec,0,nspecies+1); // add A into RhoY and RhoH
+        f.plus(r,box,box,0,0,nspecies); // no reactions for RhoH
       }
-      f.plus(a,box,box,first_spec,0,nspecies+1); // add A into RhoY and RhoH
-      f.plus(r,box,box,0,0,nspecies); // no reactions for RhoH
     }
-  }
     BL_PROFILE_VAR_STOP(HTDIFF);
 
     MultiFab Dhat(grids,dmap,nspecies+2,nGrowAdvForcing);
@@ -6810,8 +6822,9 @@ PeleLM::calcDiffusivity (const Real time)
             (time - lev_0_prevtime)/(lev_0_curtime-lev_0_prevtime) * p_amb_new;
   }
 
+  // Get the patch updated MF for rho, rhoY & T
   FillPatchIterator Rho_and_spec_fpi(*this,diff,nGrow,time,State_Type,Density,nspecies+1),
-         Temp_fpi(*this,diff,nGrow,time,State_Type,Temp,1);
+                    Temp_fpi(*this,diff,nGrow,time,State_Type,Temp,1);
   
   MultiFab& Rho_and_spec_mf = Rho_and_spec_fpi.get_mf();
   MultiFab& Temp_mf = Temp_fpi.get_mf();
@@ -6834,10 +6847,10 @@ PeleLM::calcDiffusivity (const Real time)
     bcen.resize(gbox,nc_bcen);
         
     spec_temp_visc(gbox.loVect(),gbox.hiVect(),
-                      ARLIM(Tfab.loVect()),ARLIM(Tfab.hiVect()),Tfab.dataPtr(),
-                      ARLIM(RYfab.loVect()),ARLIM(RYfab.hiVect()),RYfab.dataPtr(1),
-                      ARLIM(bcen.loVect()),ARLIM(bcen.hiVect()),bcen.dataPtr(),
-                      &nc_bcen, &P1atm_MKS, &dotemp, &vflag, &p_amb);
+                   ARLIM(Tfab.loVect()),ARLIM(Tfab.hiVect()),Tfab.dataPtr(),
+                   ARLIM(RYfab.loVect()),ARLIM(RYfab.hiVect()),RYfab.dataPtr(1),
+                   ARLIM(bcen.loVect()),ARLIM(bcen.hiVect()),bcen.dataPtr(),
+                   &nc_bcen, &P1atm_MKS, &dotemp, &vflag, &p_amb);
         
     FArrayBox& Dfab = diff[mfi];
 

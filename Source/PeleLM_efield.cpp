@@ -40,6 +40,81 @@
 
 using namespace amrex;
 
+void PeleLM::ef_advance_setup(Real time) {
+
+   ef_solve_phiv(time); 
+
+	ef_calc_transport(time);
+}	
+
+void PeleLM::ef_calc_transport(Real time) {
+	BL_PROFILE("EF::ef_calc_transport()");
+
+	const TimeLevel whichTime = which_time(State_Type, time);
+
+	BL_ASSERT(whichTime == AmrOldTime || whichTime == AmrNewTime);
+
+//	Get ptr to current version of diff	
+	MultiFab&  diff            = (whichTime == AmrOldTime) ? (*diffn_cc) : (*diffnp1_cc);
+   const int nGrow      = diff.nGrow();
+ 
+//	A few check on the grow size of EF transport properties
+   BL_ASSERT(kappaSpec_cc.nGrow() >= nGrow);
+   BL_ASSERT(kappaElec_cc.nGrow() >= nGrow);
+   BL_ASSERT(diffElec_cc.nGrow() >= nGrow);
+
+//	FillPatchIterator for State_type variables. Is it necessary ? For specs, it's been done before for 
+//	other transport properties
+   FillPatchIterator rhoY_fpi(*this,diff,nGrow,time,State_Type,first_spec,nspecies);
+   FillPatchIterator T_fpi(*this,diff,nGrow,time,State_Type,Temp,1);
+   FillPatchIterator PhiV_fpi(*this,diff,nGrow,time,State_Type,PhiV,1);
+   MultiFab& rhoYmf=rhoY_fpi.get_mf();
+   MultiFab& Tmf=T_fpi.get_mf();
+   MultiFab& PhiVmf=PhiV_fpi.get_mf();
+
+// Call Fortran to effectively compute the transport properties
+// Some of the Fortran should probably be in ChemDriver, but keep it here for now ...	
+#ifdef _OPENMP
+#pragma omp parallel
+#endif  
+  for (MFIter mfi(rhoYmf,true); mfi.isValid();++mfi)
+  {
+     const FArrayBox& RhoD = diff[mfi];
+     const FArrayBox& RhoYfab = rhoYmf[mfi];
+     const FArrayBox& Tfab = Tmf[mfi];
+     const FArrayBox& PhiVfab = PhiVmf[mfi];
+     FArrayBox& Kpspfab = kappaSpec_cc[mfi];
+     FArrayBox& Kpefab = kappaElec_cc[mfi];
+     FArrayBox& Diffefab = diffElec_cc[mfi];
+     const Box& gbox = mfi.growntilebox();
+
+     ef_spec_mobility(gbox.loVect(),gbox.hiVect(),
+                      Tfab.dataPtr(),    ARLIM(Tfab.loVect()),    ARLIM(Tfab.hiVect()),
+                      RhoYfab.dataPtr(), ARLIM(RhoYfab.loVect()), ARLIM(RhoYfab.hiVect()),
+                      RhoD.dataPtr(),    ARLIM(RhoD.loVect()),    ARLIM(RhoD.hiVect()),
+                      Kpspfab.dataPtr(), ARLIM(Kpspfab.loVect()), ARLIM(Kpspfab.hiVect()));
+
+     ef_elec_mobility(gbox.loVect(),gbox.hiVect(),
+                      Tfab.dataPtr(),    ARLIM(Tfab.loVect()),    ARLIM(Tfab.hiVect()),
+                      RhoYfab.dataPtr(), ARLIM(RhoYfab.loVect()), ARLIM(RhoYfab.hiVect()),
+                      PhiVfab.dataPtr(), ARLIM(PhiVfab.loVect()), ARLIM(PhiVfab.hiVect()),
+                      Kpefab.dataPtr(),  ARLIM(Kpefab.loVect()),  ARLIM(Kpefab.hiVect()));
+
+     ef_elec_diffusivity(gbox.loVect(),gbox.hiVect(),
+                         Tfab.dataPtr(),     ARLIM(Tfab.loVect()),     ARLIM(Tfab.hiVect()),
+                         RhoYfab.dataPtr(),  ARLIM(RhoYfab.loVect()),  ARLIM(RhoYfab.hiVect()),
+                         PhiVfab.dataPtr(),  ARLIM(PhiVfab.loVect()),  ARLIM(PhiVfab.hiVect()),
+                         Kpefab.dataPtr(),   ARLIM(Kpefab.loVect()),   ARLIM(Kpefab.hiVect()),
+							    Diffefab.dataPtr(), ARLIM(Diffefab.loVect()), ARLIM(Diffefab.hiVect()));
+  }
+}
+
+void PeleLM::ef_define_data() {
+   kappaSpec_cc.define(grids,dmap,nspecies,1);
+   kappaElec_cc.define(grids,dmap,1,1);
+   diffElec_cc.define(grids,dmap,1,1);
+}
+
 void PeleLM::ef_solve_phiv(Real time) {
 
 	MultiFab&  S = get_new_data(State_Type);
@@ -123,6 +198,7 @@ void PeleLM::ef_init() {
 	pp.query("MG_PhiV_tol",ef_phiV_tol);
 }
 
+// Setup BC conditions for linear Poisson solve on PhiV. Directly copied from the diffusion one ...
 void PeleLM::ef_set_PoissonBC(std::array<LinOpBCType,AMREX_SPACEDIM>& mlmg_lobc,
                               std::array<LinOpBCType,AMREX_SPACEDIM>& mlmg_hibc) {
 

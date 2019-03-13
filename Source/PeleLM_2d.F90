@@ -2295,6 +2295,112 @@ contains
     enddo
 
   end subroutine ef_calc_rhs_poisson
+
+  subroutine ef_spec_mobility(lo,hi, &
+                              T, DIMS(T), &
+                              rhoY, DIMS(rhoY), &
+                              rhoD, DIMS(rhoD), &
+                              kp_sp, DIMS(kp_sp)) &
+                              bind(C, name="ef_spec_mobility")
+
+    USE mod_chemdriver_defs, ONLY: zk
+    USE chem_driver, ONLY : RUNIV
+    
+    implicit none
+
+    integer lo(SDIM),hi(SDIM)
+    integer DIMDEC(T)
+    integer DIMDEC(rhoY)
+    integer DIMDEC(rhoD)
+    integer DIMDEC(kp_sp)
+    REAL_T  T(DIMV(T))
+    REAL_T  rhoY(DIMV(rhoY),Nspec)
+    REAL_T  rhoD(DIMV(rhoD),Nspec)
+    REAL_T  kp_sp(DIMV(kp_sp),Nspec)
+      
+    integer :: i, j
+    REAL_T :: Wbar, rho, oneoverdenom
+    REAL_T, DIMENSION(1:Nspec) :: Y
+
+    do j = lo(2), hi(2)
+      do i = lo(1), hi(1)
+        rho = SUM(rhoY(i,j,:))
+        Y(:) = rhoY(i,j,:)/rho
+        CALL CKMMWY(Y(:),IWRK(ckbi),RWRK(ckbr),Wbar)
+        oneoverdenom = 1.0d0 / ( rho * RUNIV() * T(i,j) )
+        kp_sp(i,j,:) = rhoD(i,j,:) * Wbar * zk(:) * oneoverdenom
+      end do
+    end do
+
+  end subroutine ef_spec_mobility
+
+  subroutine ef_elec_mobility(lo,hi, &
+                              T, DIMS(T), &
+                              rhoY, DIMS(rhoY), &
+                              phiV, DIMS(phiV), &
+                              kp_e, DIMS(kp_e)) &
+                              bind(C, name="ef_elec_mobility")
+
+    implicit none
+
+    integer lo(SDIM),hi(SDIM)
+    integer DIMDEC(T)
+    integer DIMDEC(rhoY)
+    integer DIMDEC(phiV)
+    integer DIMDEC(kp_e)
+    REAL_T  T(DIMV(T))
+    REAL_T  rhoY(DIMV(rhoY),Nspec)
+    REAL_T  phiV(DIMV(phiV))
+    REAL_T  kp_e(DIMV(kp_e))
+      
+    integer :: i, j
+
+    do j = lo(2), hi(2)
+      do i = lo(1), hi(1)
+        kp_e(i,j) = 0.4d0
+      end do
+    end do
+
+  end subroutine ef_elec_mobility
+
+  subroutine ef_elec_diffusivity(lo,hi, &
+                                 T, DIMS(T), &
+                                 rhoY, DIMS(rhoY), &
+                                 phiV, DIMS(phiV), &
+                                 kp_e, DIMS(kp_e), &
+                                 diff_e, DIMS(diff_e)) &
+                                 bind(C, name="ef_elec_diffusivity")
+
+    USE mod_chemdriver_defs, ONLY: Na, CperECharge
+    USE chem_driver, ONLY : RUNIV
+    
+    implicit none
+
+    integer lo(SDIM),hi(SDIM)
+    integer DIMDEC(T)
+    integer DIMDEC(rhoY)
+    integer DIMDEC(phiV)
+    integer DIMDEC(kp_e)
+    integer DIMDEC(diff_e)
+    REAL_T  T(DIMV(T))
+    REAL_T  rhoY(DIMV(rhoY),Nspec)
+    REAL_T  phiV(DIMV(phiV))
+    REAL_T  kp_e(DIMV(kp_e))
+    REAL_T  diff_e(DIMV(diff_e))
+      
+    integer :: i, j
+
+    REAL_T :: oneoverdenom
+
+    oneoverdenom = 1.0d0 / ( Na * CperECharge ) 
+
+    do j = lo(2), hi(2)
+      do i = lo(1), hi(1)
+        diff_e(i,j) = kp_e(i,j) * RUNIV() * T(i,j) * oneoverdenom
+      end do
+    end do
+
+  end subroutine ef_elec_diffusivity
 #endif  
 
 end module PeleLM_2d
