@@ -64,6 +64,7 @@
 	void test_exit_newton(const int NK_ite, bool& exit_newton);
 
 // Get electron edge transport properties
-	void ef_get_edge_transport();
+	void ef_get_edge_transport(amrex::MultiFab** ke_ec,
+										amrex::MultiFab** De_ec);
 
 #endif /*_Efield_H_*/

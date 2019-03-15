@@ -270,8 +270,8 @@ void PeleLM::ef_solve_PNP(Real dt,
 // Get edge-averaged transport properties	
    FluxBoxes diff_e(this, 1, 0);
    FluxBoxes conv_e(this, 1, 0);
-   Multifab** kappaElec_ec = conv_e.get();
-   Multifab** diffElec_ec = diff_e.get();
+   MultiFab** kappaElec_ec = conv_e.get();
+   MultiFab** diffElec_ec = diff_e.get();
    ef_get_edge_transport(diffElec_ec, kappaElec_ec); 
 
 // Copy some stuff ? Need: macvel, Diff_e, Kp_e, SDC_force, Godunov_force	
@@ -386,8 +386,8 @@ void PeleLM::ef_get_edge_transport(MultiFab* Ke_ec[BL_SPACEDIM],
 	   const Box& box = mfi.tilebox();
 
       for (int dir = 0; dir < BL_SPACEDIM; dir++) {
-         FPLoc bc_lo = fpi_phys_loc(get_desc_lst()[State_Type].getBC(state_comp).lo(dir));
-	 	   FPLoc bc_hi = fpi_phys_loc(get_desc_lst()[State_Type].getBC(state_comp).hi(dir));
+         FPLoc bc_lo = fpi_phys_loc(get_desc_lst()[State_Type].getBC(nE).lo(dir));
+	 	   FPLoc bc_hi = fpi_phys_loc(get_desc_lst()[State_Type].getBC(nE).hi(dir));
 	 	   const Box& ebox = mfi.nodaltilebox(dir);
 	 	   center_to_edge_fancy((diffElec_cc)[mfi],(*De_ec[dir])[mfi],
 		                         amrex::grow(box,amrex::BASISV(dir)), ebox, 0, 
@@ -397,4 +397,5 @@ void PeleLM::ef_get_edge_transport(MultiFab* Ke_ec[BL_SPACEDIM],
 		                         0, 1, geom.Domain(), bc_lo, bc_hi);
       }
    }
+//	showMF("sdc",,"sdc_new_state",level);
 }
