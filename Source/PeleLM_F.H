@@ -9,6 +9,20 @@
 extern "C" {
 #endif
 
+//PelePhysics stuffs
+
+  void pphys_network_init();
+
+  void pphys_network_close();
+
+  void pphys_reactor_init(int iE);
+
+  void pphys_reactor_close();
+
+  void pphys_transport_init();
+
+  void pphys_transport_close();
+
   void active_control(const amrex::Real* fuelmass,
                           const amrex::Real* time,
                           const amrex::Real* crsedt, 

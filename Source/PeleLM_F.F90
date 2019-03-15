@@ -23,6 +23,57 @@ module PeleLM_F
 
 contains
 
+! Init/Close PelePhysics network, transport, reaction. Similar to PeleC.  
+
+  subroutine pphys_network_init() bind(C, name="pphys_network_init")                                                                                         
+     use network, only: network_init
+     
+     call network_init()
+       
+  end subroutine pphys_network_init 
+
+  subroutine pphys_network_close() bind(C, name="pphys_network_close")
+
+     use network, only: network_close
+
+     call network_close()
+
+  end subroutine pphys_network_close
+
+  subroutine pphys_transport_init() bind(C, name="pphys_transport_init")
+
+     use transport_module, only: transport_init
+
+     call transport_init()
+
+  end subroutine pphys_transport_init  
+
+  subroutine pphys_transport_close() bind(C, name="pphys_transport_close")
+
+      use transport_module, only: transport_close
+
+      call transport_close()
+
+  end subroutine pphys_transport_close
+
+  subroutine pphys_reactor_init(iE) bind(C, name="pphys_reactor_init")
+
+      use reactor_module, only: reactor_init
+      implicit none
+      integer :: iE
+
+      call reactor_init(iE)
+
+  end subroutine pphys_reactor_init
+
+  subroutine pphys_reactor_close() bind(C, name="pphys_reactor_close")
+
+      use reactor_module, only: reactor_close
+
+      call reactor_close()
+
+  end subroutine pphys_reactor_close
+
   subroutine set_scal_numb(DensityIn, TempIn, TracIn, RhoHIn, &
                            FirstSpecIn, LastSpecIn) &
                            bind(C, name="set_scal_numb")
