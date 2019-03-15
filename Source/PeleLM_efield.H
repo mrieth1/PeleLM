@@ -14,10 +14,17 @@
    static int       			    ef_PoissonMaxOrder;
 	static amrex::Real   		 ef_phiV_tol;
 
+// PNP solve options	
+   static int						 ef_max_NK_ite;
+
 // Data
 	amrex::MultiFab    kappaSpec_cc;
 	amrex::MultiFab    kappaElec_cc;
 	amrex::MultiFab    diffElec_cc;
+
+	amrex::MultiFab    pnp_X;
+	amrex::MultiFab    pnp_res;
+	amrex::MultiFab    pnp_bgchrg;
 
 // Functions	
 	static void ef_init();
@@ -37,5 +44,26 @@
 // Setup PhiV BC for linear Poisson solve
    void ef_set_PoissonBC(std::array<amrex::LinOpBCType,AMREX_SPACEDIM>& mlmg_lobc,
                          std::array<amrex::LinOpBCType,AMREX_SPACEDIM>& mlmg_hibc);
+
+// Solve PNP function: return updated PhiV and nE
+	void ef_solve_PNP(amrex::Real      dt,
+						   amrex::MultiFab& Dn,
+						   amrex::MultiFab& Dnp1,
+						   amrex::MultiFab& Dhat);
+
+// PNP NL residual function
+	void ef_NL_residual(amrex::Real      dt);
+
+// PNP provisional charge distribution
+	void ef_bg_chrg(amrex::Real      dt,
+						 amrex::MultiFab& Dn,
+						 amrex::MultiFab& Dnp1,
+						 amrex::MultiFab& Dhat);
+
+// PNP exit Newton test
+	void test_exit_newton(const int NK_ite, bool& exit_newton);
+
+// Get electron edge transport properties
+	void ef_get_edge_transport();
 
 #endif /*_Efield_H_*/

@@ -113,6 +113,10 @@ void PeleLM::ef_define_data() {
    kappaSpec_cc.define(grids,dmap,nspecies,1);
    kappaElec_cc.define(grids,dmap,1,1);
    diffElec_cc.define(grids,dmap,1,1);
+
+	pnp_X.define(grids,dmap,2,1);
+	pnp_res.define(grids,dmap,2,1);
+	pnp_bgchrg.define(grids,dmap,1,1);
 }
 
 void PeleLM::ef_solve_phiv(Real time) {
@@ -189,6 +193,7 @@ void PeleLM::ef_init() {
    PeleLM::ef_PoissonMaxIter			 = 1000;
    PeleLM::ef_PoissonVerbose			 = 1;
    PeleLM::ef_PoissonMaxOrder			 = 4;
+	PeleLM::ef_max_NK_ite             = 20;
 
 	ParmParse pp("ef");
 
@@ -253,4 +258,143 @@ void PeleLM::ef_set_PoissonBC(std::array<LinOpBCType,AMREX_SPACEDIM>& mlmg_lobc,
             }
         }
     }
+}
+
+void PeleLM::ef_solve_PNP(Real dt, 
+							     MultiFab& Dn,
+								  MultiFab& Dnp1,
+								  MultiFab& Dhat) {
+
+	BL_PROFILE("EF::ef_solve_PNP()");
+
+// Get edge-averaged transport properties	
+   FluxBoxes diff_e(this, 1, 0);
+   FluxBoxes conv_e(this, 1, 0);
+   Multifab** kappaElec_ec = conv_e.get();
+   Multifab** diffElec_ec = diff_e.get();
+   ef_get_edge_transport(diffElec_ec, kappaElec_ec); 
+
+// Copy some stuff ? Need: macvel, Diff_e, Kp_e, SDC_force, Godunov_force	
+// Need the old version of nE
+// Need to store the GC of the old version. PNP solved only for interior points
+
+// Get PNP components  	
+	MultiFab&  S = get_new_data(State_Type);
+	MultiFab&  S_old = get_old_data(State_Type);
+	MultiFab nE_old_alias(S_old,amrex::make_alias,nE,1);
+
+	MultiFab::Copy(pnp_X, S, nE, 0, 2, 1);
+// Get X scale matrix data : TypValue of nE and PhiV
+
+// Compute provisional CD
+   ef_bg_chrg(dt, Dn, Dnp1, Dhat);
+
+// Pre-Newton stuff	
+// Get a MF for just nE and PhiV ?
+// Get the initial residuals
+   ef_NL_residual(dt);
+// Get the residual scaling
+// Check for direct convergence
+// Get data for globalization algo: in 1D I call Jac ... not great ...
+
+bool exit_newton = false;
+int NK_ite = 0;	
+do {
+
+	NK_ite += 1;
+	test_exit_newton(NK_ite, exit_newton);
+
+} while( ! exit_newton );
+
+// Post newton stuff
+
+}
+
+void PeleLM::test_exit_newton(const int NK_ite, bool& exit_newton) {
+
+  if ( NK_ite > ef_max_NK_ite ) {
+	  exit_newton = true;
+	  amrex::Print() << " Max Newton iteration reached for PNP solve \n";
+  }
+
+}
+
+void PeleLM::ef_NL_residual(Real dt) {
+
+// Use amrex operators to get the RHS
+ 
+// Diffusion of ne
+
+// Convection of ne
+  
+// Laplacian of PhiV
+
+//#ifdef _OPENMP
+//#pragma omp parallel
+//#endif
+//   for (MFIter mfi(pnp_X,true); mfi.isValid(); ++mfi)
+//   {
+//      const Box& box = mfi.tilebox();
+//      const FArrayBox& Xfab = pnp_X[mfi];
+//      const FArrayBox& Kpefab = kappaElec_cc[mfi];
+//      const FArrayBox& Defab = diffElec_cc[mfi];
+//      const FArrayBox& bgchrgfab = pnp_bgchrg[mfi];
+//      FArrayBox& Resfab = pnp_res[mfi];
+//      ef_calc_NL_residual(box.loVect(), box.hiVect(),
+//                          Xfab.dataPtr(0),      ARLIM(Xfab.loVect()),       ARLIM(Xfab.hiVect()),
+//                          Kpefab.dataPtr(),     ARLIM(Kpefab.loVect()),     ARLIM(Kpefab.hiVect()),
+//                          Defab.dataPtr(),      ARLIM(Defab.loVect()),      ARLIM(Defab.hiVect()),
+//                          bgchrgfab.dataPtr(),  ARLIM(bgchrgfab.loVect()),  ARLIM(bgchrgfab.hiVect()),
+//				              Resfab.dataPtr(0),    ARLIM(Resfab.loVect()),     ARLIM(Resfab.hiVect()),
+//								  dt);
+//   }
+}
+
+void PeleLM::ef_bg_chrg(Real dt,
+							   MultiFab& Dn,
+								MultiFab& Dnp1,
+								MultiFab& Dhat) {
+
+#ifdef _OPENMP
+#pragma omp parallel
+#endif
+   for (MFIter mfi(pnp_bgchrg,true); mfi.isValid(); ++mfi) {
+		const Box& box = mfi.tilebox();
+	   const FArrayBox& rhoYoldfab = get_old_data(State_Type)[mfi];
+	   const FArrayBox& afab = (*aofs)[mfi];
+		const FArrayBox& dnfab = Dn[mfi];   
+		const FArrayBox& dnp1fab = Dnp1[mfi];
+		const FArrayBox& dhatfab = Dhat[mfi];
+	   const FArrayBox& rfab = get_new_data(RhoYdot_Type)[mfi];
+	   FArrayBox& bgchrgfab = pnp_bgchrg[mfi];
+		ef_calc_chargedist_prov(box.loVect(), box.hiVect(),
+				                  rhoYoldfab.dataPtr(0),    ARLIM(rhoYoldfab.loVect()), ARLIM(rhoYoldfab.hiVect()), 
+										afab.dataPtr(first_spec), ARLIM(afab.loVect()),       ARLIM(afab.hiVect()),
+										dnfab.dataPtr(0),         ARLIM(dnfab.loVect()),      ARLIM(dnfab.hiVect()),
+										dnp1fab.dataPtr(0),       ARLIM(dnp1fab.loVect()),    ARLIM(dnp1fab.hiVect()),
+										dhatfab.dataPtr(0),       ARLIM(dhatfab.loVect()),    ARLIM(dhatfab.hiVect()),
+										rfab.dataPtr(0),          ARLIM(rfab.loVect()),       ARLIM(rfab.hiVect()),
+										bgchrgfab.dataPtr(),		  ARLIM(bgchrgfab.loVect()),  ARLIM(bgchrgfab.hiVect()),
+										dt);
+   }
+}
+
+void PeleLM::ef_get_edge_transport(MultiFab* Ke_ec[BL_SPACEDIM],
+											  MultiFab* De_ec[BL_SPACEDIM]) {
+
+   for (MFIter mfi(diffElec_cc,true); mfi.isValid(); ++mfi) {
+	   const Box& box = mfi.tilebox();
+
+      for (int dir = 0; dir < BL_SPACEDIM; dir++) {
+         FPLoc bc_lo = fpi_phys_loc(get_desc_lst()[State_Type].getBC(state_comp).lo(dir));
+	 	   FPLoc bc_hi = fpi_phys_loc(get_desc_lst()[State_Type].getBC(state_comp).hi(dir));
+	 	   const Box& ebox = mfi.nodaltilebox(dir);
+	 	   center_to_edge_fancy((diffElec_cc)[mfi],(*De_ec[dir])[mfi],
+		                         amrex::grow(box,amrex::BASISV(dir)), ebox, 0, 
+		                         0, 1, geom.Domain(), bc_lo, bc_hi);
+	 	   center_to_edge_fancy((kappaElec_cc)[mfi],(*Ke_ec[dir])[mfi],
+		                         amrex::grow(box,amrex::BASISV(dir)), ebox, 0, 
+		                         0, 1, geom.Domain(), bc_lo, bc_hi);
+      }
+   }
 }

@@ -2276,13 +2276,13 @@ contains
 
     implicit none
 
-    integer lo(SDIM),hi(SDIM)
-    integer DIMDEC(rhs)
-    integer DIMDEC(rhoY)
-    integer DIMDEC(ne_ar)
-    REAL_T  rhs(DIMV(rhs))
-    REAL_T  rhoY(DIMV(rhoY),1:Nspec)
-    REAL_T  ne_ar(DIMV(ne_ar))
+    integer :: lo(SDIM),hi(SDIM)
+    integer :: DIMDEC(rhs)
+    integer :: DIMDEC(rhoY)
+    integer :: DIMDEC(ne_ar)
+    REAL_T  :: rhs(DIMV(rhs))
+    REAL_T  :: rhoY(DIMV(rhoY),1:Nspec)
+    REAL_T  :: ne_ar(DIMV(ne_ar))
       
     integer :: i, j
     REAL_T :: factor_rhs
@@ -2308,15 +2308,15 @@ contains
     
     implicit none
 
-    integer lo(SDIM),hi(SDIM)
-    integer DIMDEC(T)
-    integer DIMDEC(rhoY)
-    integer DIMDEC(rhoD)
-    integer DIMDEC(kp_sp)
-    REAL_T  T(DIMV(T))
-    REAL_T  rhoY(DIMV(rhoY),Nspec)
-    REAL_T  rhoD(DIMV(rhoD),Nspec)
-    REAL_T  kp_sp(DIMV(kp_sp),Nspec)
+    integer :: lo(SDIM),hi(SDIM)
+    integer :: DIMDEC(T)
+    integer :: DIMDEC(rhoY)
+    integer :: DIMDEC(rhoD)
+    integer :: DIMDEC(kp_sp)
+    REAL_T  :: T(DIMV(T))
+    REAL_T  :: rhoY(DIMV(rhoY),Nspec)
+    REAL_T  :: rhoD(DIMV(rhoD),Nspec)
+    REAL_T  :: kp_sp(DIMV(kp_sp),Nspec)
       
     integer :: i, j
     REAL_T :: Wbar, rho, oneoverdenom
@@ -2343,15 +2343,15 @@ contains
 
     implicit none
 
-    integer lo(SDIM),hi(SDIM)
-    integer DIMDEC(T)
-    integer DIMDEC(rhoY)
-    integer DIMDEC(phiV)
-    integer DIMDEC(kp_e)
-    REAL_T  T(DIMV(T))
-    REAL_T  rhoY(DIMV(rhoY),Nspec)
-    REAL_T  phiV(DIMV(phiV))
-    REAL_T  kp_e(DIMV(kp_e))
+    integer :: lo(SDIM),hi(SDIM)
+    integer :: DIMDEC(T)
+    integer :: DIMDEC(rhoY)
+    integer :: DIMDEC(phiV)
+    integer :: DIMDEC(kp_e)
+    REAL_T  :: T(DIMV(T))
+    REAL_T  :: rhoY(DIMV(rhoY),Nspec)
+    REAL_T  :: phiV(DIMV(phiV))
+    REAL_T  :: kp_e(DIMV(kp_e))
       
     integer :: i, j
 
@@ -2376,17 +2376,17 @@ contains
     
     implicit none
 
-    integer lo(SDIM),hi(SDIM)
-    integer DIMDEC(T)
-    integer DIMDEC(rhoY)
-    integer DIMDEC(phiV)
-    integer DIMDEC(kp_e)
-    integer DIMDEC(diff_e)
-    REAL_T  T(DIMV(T))
-    REAL_T  rhoY(DIMV(rhoY),Nspec)
-    REAL_T  phiV(DIMV(phiV))
-    REAL_T  kp_e(DIMV(kp_e))
-    REAL_T  diff_e(DIMV(diff_e))
+    integer :: lo(SDIM),hi(SDIM)
+    integer :: DIMDEC(T)
+    integer :: DIMDEC(rhoY)
+    integer :: DIMDEC(phiV)
+    integer :: DIMDEC(kp_e)
+    integer :: DIMDEC(diff_e)
+    REAL_T  :: T(DIMV(T))
+    REAL_T  :: rhoY(DIMV(rhoY),Nspec)
+    REAL_T  :: phiV(DIMV(phiV))
+    REAL_T  :: kp_e(DIMV(kp_e))
+    REAL_T  :: diff_e(DIMV(diff_e))
       
     integer :: i, j
 
@@ -2401,6 +2401,86 @@ contains
     end do
 
   end subroutine ef_elec_diffusivity
+
+  subroutine ef_calc_chargedist_prov(lo, hi, &
+                                     rhoY_old, DIMS(rhoY_old), &
+                                     AofS, DIMS(AofS), &
+                                     Dn, DIMS(Dn), &
+                                     Dnp1, DIMS(Dnp1), &
+                                     Dhat, DIMS(Dhat), &
+                                     I_R, DIMS(I_R), &
+                                     bg_chrg, DIMS(bg_chrg), &
+                                     dt) bind(C, name="ef_calc_chargedist_prov")
+
+  USE mod_chemdriver_defs, ONLY : zk                                
+
+  implicit none
+
+  integer :: lo(SDIM),hi(SDIM)
+  integer :: DIMDEC(rhoY_old)
+  integer :: DIMDEC(AofS)
+  integer :: DIMDEC(Dn)
+  integer :: DIMDEC(Dnp1)
+  integer :: DIMDEC(Dhat)
+  integer :: DIMDEC(I_R)
+  integer :: DIMDEC(bg_chrg)
+  REAL_T  :: rhoY_old(DIMV(rhoY_old), Nspec)
+  REAL_T  :: AofS(DIMV(AofS), Nspec)
+  REAL_T  :: Dn(DIMV(Dn), Nspec)
+  REAL_T  :: Dnp1(DIMV(Dnp1), Nspec)
+  REAL_T  :: Dhat(DIMV(Dhat), Nspec)
+  REAL_T  :: I_R(DIMV(I_R), Nspec)
+  REAL_T  :: bg_chrg(DIMV(bg_chrg))
+  REAL_T  :: dt
+
+  integer :: i, j
+
+  REAL_T, DIMENSION(1:Nspec) :: rhoYprov
+
+  do j = lo(2), hi(2)
+    do i = lo(1), hi(1)
+      rhoYprov(:) = rhoY_old(i,j,:) + dt * ( AofS(i,j,:) + &
+                                             0.5d0 * ( Dn(i,j,:) - Dnp1(i,j,:) ) + &
+                                             Dhat(i,j,:) + &
+                                             I_R(i,j,:) )
+      bg_chrg(i,j) = SUM(zk(:) * rhoYprov(:))
+    end do
+  end do
+
+  end subroutine ef_calc_chargedist_prov
+
+  subroutine ef_calc_NL_residual(lo, hi, &
+                                 X, DIMS(X), & 
+                                 Ke, DIMS(Ke), & 
+                                 De, DIMS(De), & 
+                                 bg_chrg, DIMS(bg_chrg), & 
+                                 res, DIMS(res), & 
+                                 dt) bind(C, name="ef_calc_NL_residual")
+                              
+  implicit none                            
+
+  integer :: lo(SDIM),hi(SDIM)
+  integer :: DIMDEC(X)
+  integer :: DIMDEC(Ke)
+  integer :: DIMDEC(De)
+  integer :: DIMDEC(bg_chrg)
+  integer :: DIMDEC(res)
+  REAL_T  :: X(DIMV(X),2)
+  REAL_T  :: Ke(DIMV(Ke))
+  REAL_T  :: De(DIMV(De))
+  REAL_T  :: bg_chrg(DIMV(bg_chrg))
+  REAL_T  :: res(DIMV(res),2)
+  REAL_T  :: dt
+
+  integer :: i, j
+
+  do j = lo(2), hi(2)
+    do i = lo(1), hi(1)
+       res(i,j,:) = 0.0d0
+    end do
+  end do
+
+  end subroutine ef_calc_NL_residual
 #endif  
 
 end module PeleLM_2d

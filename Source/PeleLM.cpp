@@ -177,6 +177,7 @@ Real PeleLM::ef_phiV_tol;
 int  PeleLM::ef_PoissonMaxIter;
 int  PeleLM::ef_PoissonVerbose;
 int  PeleLM::ef_PoissonMaxOrder;
+int  PeleLM::ef_max_NK_ite;
 #endif  
 
 static
@@ -4721,6 +4722,10 @@ PeleLM::advance (Real time,
     showMF("sdc",DDnp1,"sdc_DDnp1_before_R",level,sdc_iter,parent->levelSteps(level));
     showMF("sdc",Dhat,"sdc_Dhat_before_R",level,sdc_iter,parent->levelSteps(level));
     showMF("sdc",*aofs,"sdc_A_before_R",level,sdc_iter,parent->levelSteps(level));
+
+#ifdef USE_EFIELD
+	 ef_solve_PNP(dt, Dn, Dnp1, Dhat);
+#endif	 
 
     // 
     // Compute R (F = A + 0.5(Dn - Dnp1 + DDn + DDnp1) + Dhat )
