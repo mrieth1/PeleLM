@@ -1,7 +1,7 @@
-TOP = ../../..
-AMREX_HOME ?= ${TOP}/amrex
-IAMR_HOME ?= ${TOP}/IAMR
-PELELM_HOME ?= ${TOP}/PeleLM
+#TOP = ../../..
+#AMREX_HOME ?= ${TOP}/amrex
+#IAMR_HOME ?= ${TOP}/IAMR
+#PELELM_HOME ?= ${TOP}/PeleLM
 
 #
 # Build configuration
@@ -11,7 +11,7 @@ DIM             = 2
 COMP            = gnu
 DEBUG           = FALSE
 USE_MPI         = TRUE
-USE_OMP         = TRUE
+USE_OMP         = FALSE
 PRECISION       = DOUBLE
 VERBOSE         = FALSE
 
@@ -36,7 +36,7 @@ DEFINES+=-DALWAYS_NEW_J
 #USE_TDEPFORCING = TRUE
 
 # Choose model (from list below), and pmf file
-Chemistry_Model = DRM19
+Chemistry_Model = drm19
 fEXE_sources += drm19Soln_seed_0.50.f
 
 #Chemistry_Model = LIDRYER
@@ -47,6 +47,15 @@ fEXE_sources += drm19Soln_seed_0.50.f
 
 #Chemistry_Model = GRI30
 #fEXE_sources += gri30_070.f
+
+# This sets the EOS directory in $(PELE_PHYSICS_HOME)/Eos
+Eos_dir     := Fuego
+
+# This sets the network directory in $(PELE_PHYSICS_HOME)/Reactions
+Reactions_dir := Fuego
+
+# This sets the transport directory in $(PELE_PHYSICS_HOME)/Transport
+Transport_dir := EGLib
 
 Blocs   := .
 
