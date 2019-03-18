@@ -433,6 +433,12 @@ PeleLM::variableSetUp ()
   }
 
   Initialize();
+
+  /* PelePhysics */
+  init_network();
+  //init_reactor(1);
+  //init_transport();
+
   BCRec bc;
   //
   // Set state variable Id's (Density and velocities set already).

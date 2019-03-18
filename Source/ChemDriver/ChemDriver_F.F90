@@ -180,7 +180,7 @@ contains
     ! Get chemistry mechanism parameters.
     !
     CALL CKINIT()
-    CALL CKINDX(idummy(1),rdummy(1),Nelt,Nspec,Nreac,Nfit)
+    CALL CKINDX(Nelt,Nspec,Nreac,Nfit)
     !
     ! Set up EGlib workspace.
     !
@@ -225,6 +225,9 @@ contains
     allocate(RWRK(dvr+dvdr))
     allocate(IWRK(dvi))
 
+    call vode_init(NEQ,0,1,1.d-10,1.d-10,2,&
+            10000,.false.,.false.,.true.,.true.)
+
 !$omp single
     use_eg = 0
     use_mc = 0
@@ -256,19 +259,9 @@ contains
     !     Set IOPT=1 parameter settings for VODE
     !     They only really need to be set once.
     !     
-    RWRK(dvbr+4) = 0
-    RWRK(dvbr+5) = 0
-    RWRK(dvbr+6) = 1.d-19
-    IWRK(dvbi+4) = 0
-    IWRK(dvbi+5) = max_vode_subcycles
-    IWRK(dvbi+6) = 0
     !
     ! Set molecular weights where conpF can access'm.
     !
-    CALL CKWT(IWRK(ckbi), RWRK(ckbr), RWRK(NWT))
-    do n = 0,Nspec-1
-      RWRK(NWTI+n) = 1.d0 / RWRK(NWT+n)
-    enddo
 !$omp end parallel
 
     if (RTOT .GT. dvder) then
@@ -380,7 +373,7 @@ contains
     end if
     Nreacs = 0
     do j=1,Nreac
-      CALL CKINU(j, Ndim, IWRK(ckbi), RWRK(ckbr), Nids, KI, NU)
+      CALL CKINU(j, Ndim, Nids, KI, NU)
       do n=1,Nids
         if ((KI(n).eq.id).and.(NU(n).lt.0)) then
                Nreacs = Nreacs + 1
@@ -411,7 +404,7 @@ contains
     end if
     Nreacs = 0
     do j=1,Nreac
-      CALL CKINU(j, Ndim, IWRK(ckbi), RWRK(ckbr), Nids, KI, NU)
+      CALL CKINU(j, Ndim, Nids, KI, NU)
       do n=1,Nids
         if ((KI(n).eq.id).and.(NU(n).gt.0)) then
                Nreacs = Nreacs + 1
@@ -439,7 +432,7 @@ contains
       write(6,*) 'FORT_CKNU:  nu work array too small: '
       call bl_abort(" ")
     endif
-    call CKNU(maxreac, IWRK(ckbi), RWRK(ckbr), nu)
+    call CKNU(maxreac, nu)
  
   end subroutine SETNU
 
@@ -483,7 +476,7 @@ contains
 
     integer eltID, spID
     integer NCF(maxelts,maxspec)
-    CALL CKNCF(maxelts, IWRK(ckbi), RWRK(ckbr), NCF)
+    CALL CKNCF(maxelts, NCF)
     CKELTXINSPY = NCF(eltID+1,spID+1)
       
   end function CKELTXINSPY
@@ -533,7 +526,7 @@ contains
 
 #include "cdwrk.H"
 
-    call CKRP(IWRK(ckbi),RWRK(ckbr),RUNIV,Ruc,Pa)
+    call CKRP(RUNIV,Ruc,Pa)
 !     1 erg/(mole.K) = 1.e-4 J/(kmole.K)
     RUNIV = RUNIV*1.d-4
 
@@ -548,7 +541,7 @@ contains
 
 #include "cdwrk.H"
 
-    call CKRP(IWRK(ckbi),RWRK(ckbr),Ru,Ruc,Pa)
+    call CKRP(Ru,Ruc,Pa)
 !     1 N/(m.m) = 0.1 dyne/(cm.cm)
     P1ATMMKS = Pa*1.d-1
 
@@ -622,7 +615,7 @@ contains
 
     error = .false.
     lout = 6
-    call CKSYMR(fortReacIdx,lout,IWRK(ckbi),RWRK(ckbr), &
+    call CKSYMR(fortReacIdx,lout, &
                 CWRK(ckbc),str_len,line,error)
     if (error) then
       write(lout,*) 'Could not get reaction name for ',fortReacIdx
@@ -696,7 +689,7 @@ contains
 
     REAL_T mwt(*)
 !     Result in kg/kmole
-    call CKWT(IWRK(ckbi),RWRK(ckbr),mwt)
+    call CKWT(mwt)
 
   end subroutine get_CKMWT
 
@@ -709,7 +702,7 @@ contains
 
     REAL_T awt(*)
 !     Result in kg/kmole
-    call CKAWT(IWRK(ckbi),RWRK(ckbr),awt)
+    call CKAWT(awt)
 
   end subroutine FORT_GETCKAWT
 
@@ -858,7 +851,7 @@ contains
 
     HMIX_MKS = (rhoh_INIT + c_0(Nspec+1)*TIME) * RINV_MKS
     call TfromHYpt(T_cell,HMIX_MKS,Y,HtoTerrMAX,HtoTiterMAX,res,Niter)
-    call CKWC(T_cell,CONC_CGS,IWRK,RWRK,WDOT_CGS)
+    call CKWC(T_cell,CONC_CGS,WDOT_CGS)
 
     ZP(Nspec+1) = c_0(Nspec+1)
     THFAC = 1.d3/thickFacCH
@@ -903,14 +896,14 @@ contains
     ihitlo = 0
     ihithi = 0
 
-    CALL CKUBMS(T,Y,IWRK(ckbi),RWRK(ckbr),e)
+    CALL CKUBMS(T,Y,e)
 
     de = two*ABS(e - etarg)/(one + ABS(e) + ABS(etarg))
     res(Niter) = de
     converged = de.le.errMAX
 
     do while ((.not.converged) .and. (.not.soln_bad))
-      CALL CKCVBS(T,Y,IWRK(ckbi),RWRK(ckbr),cv)
+      CALL CKCVBS(T,Y,cv)
       dT = (etarg - e)/cv
       if ((Niter.le.NiterDAMP).and.(T+dT.ge.TMAX)) then
         T = TMAX
@@ -926,7 +919,7 @@ contains
         TfromeYpt = -1
         goto 100
       else
-        CALL CKUBMS(T,Y,IWRK(ckbi),RWRK(ckbr),e)
+        CALL CKUBMS(T,Y,e)
         de = two*ABS(e - etarg)/(one + ABS(e) + ABS(etarg))
         res(Niter) = de
         Niter = Niter + 1
@@ -939,15 +932,15 @@ contains
 
       if((ihitlo.eq.1).and.(e.gt.etarg))then
         T = 300.d0
-        CALL CKUBMS(T,Y,IWRK(ckbi),RWRK(ckbr),e300)
-        CALL CKCVBS(T,Y,IWRK(ckbi),RWRK(ckbr),cv300)
+        CALL CKUBMS(T,Y,e300)
+        CALL CKCVBS(T,Y,cv300)
         T=300.d0+(etarg-e300)/cv300
         converged = .true.
       endif
       if((ihithi.eq.1).and.(e.lt.etarg))then
         T = 6500.d0
-        CALL CKUBMS(T,Y,IWRK(ckbi),RWRK(ckbr),e6500)
-        CALL CKCVBS(T,Y,IWRK(ckbi),RWRK(ckbr),cv6500)
+        CALL CKUBMS(T,Y,e6500)
+        CALL CKCVBS(T,Y,cv6500)
         T=6500.d0+(etarg-e6500)/cv6500
         converged = .true.
       endif
@@ -1014,7 +1007,7 @@ contains
       ihitlo    = 0
       ihithi    = 0
 
-      CALL CKHBMS(T,Y,IWRK(ckbi),RWRK(ckbr),H)
+      CALL CKHBMS(T,Y,H)
 
       old_T = T
       old_H = H
@@ -1026,7 +1019,7 @@ contains
 
       do while ((.not.converged) .and. (.not.stalled) .and. (.not.soln_bad))
 
-         CALL CKCPBS(T,Y,IWRK(ckbi),RWRK(ckbr),cp)
+         CALL CKCPBS(T,Y,cp)
          dT = (Htarg - H)/cp
          old_T = T
          if ((Niter.le.NiterDAMP).and.(T+dT.ge.TMAX)) then
@@ -1044,7 +1037,7 @@ contains
             exit
          else
             old_H = H
-            CALL CKHBMS(T,Y,IWRK(ckbi),RWRK(ckbr),H)
+            CALL CKHBMS(T,Y,H)
             dH = two*ABS(H - Htarg)/(one + ABS(H) + ABS(Htarg))
             res(Niter) = min(dH,abs(dT))
             Niter = Niter + 1
@@ -1061,15 +1054,15 @@ contains
 
          if ((ihitlo.eq.1).and.(H.gt.Htarg)) then
             T = TMIN
-            CALL CKHBMS(T,Y,IWRK(ckbi),RWRK(ckbr),HMIN)
-            CALL CKCPBS(T,Y,IWRK(ckbi),RWRK(ckbr),cpMIN)
+            CALL CKHBMS(T,Y,HMIN)
+            CALL CKCPBS(T,Y,cpMIN)
             T=TMIN+(Htarg-HMIN)/cpMIN
             converged = .true.
          endif
          if ((ihithi.eq.1).and.(H.lt.Htarg)) then
             T = TMAX
-            CALL CKHBMS(T,Y,IWRK(ckbi),RWRK(ckbr),HMAX)
-            CALL CKCPBS(T,Y,IWRK(ckbi),RWRK(ckbr),cpMAX)
+            CALL CKHBMS(T,Y,HMAX)
+            CALL CKCPBS(T,Y,cpMAX)
             T=TMAX+(Htarg-HMAX)/cpMAX
             converged = .true.
          endif
@@ -1089,7 +1082,7 @@ contains
                   Niter = -3
                   exit
                endif
-               CALL CKHBMS(Tsec,Y,IWRK(ckbi),RWRK(ckbr),Hsec)
+               CALL CKHBMS(Tsec,Y,Hsec)
                if ( (Hsec-Htarg)*(Htarg-H) .gt. 0.d0 ) then
                   old_H = H
                   old_T = T

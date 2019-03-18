@@ -380,7 +380,11 @@ private:
                                     const FPLoc&     bc_hi);
 
   static void init_once ();
-    
+
+  static void init_network ();
+  static void init_reactor (int iE);
+  static void init_transport ();
+
   static void RhoH_to_Temp (amrex::MultiFab& S,
                             int       nGrow = 0,
                             int       dominmax = false);

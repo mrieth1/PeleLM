@@ -279,6 +279,25 @@ PeleLM::compute_rhohmix (Real      time,
     amrex::Print() << "PeleLM::compute_rhohmix(): lev: " << level << ", time: " << run_time << '\n';
   }
 }
+
+void
+PeleLM::init_network ()
+{
+	pphys_network_init(); 
+}
+
+void
+PeleLM::init_reactor (int iE)
+{
+	pphys_reactor_init(iE); 
+}
+
+void
+PeleLM::init_transport ()
+{
+	pphys_transport_init(); 
+}
+
 void
 PeleLM::Initialize ()
 {
@@ -456,6 +475,10 @@ PeleLM::Initialize ()
     if (verbose) amrex::Print() << "PeleLM::read_params: Using EGLib transport " << '\n';
   }
   chemSolve = new ChemDriver();
+
+  /* PelePhysics */
+  //pphys_transport_init();
+
 
   pp.query("turbFile",turbFile);
 
