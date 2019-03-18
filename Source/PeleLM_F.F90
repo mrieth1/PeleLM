@@ -74,6 +74,61 @@ contains
 
   end subroutine pphys_reactor_close
 
+  subroutine pphys_get_num_spec(nspec_out) bind(C, name="pphys_get_num_spec")
+
+      use network, only : nspec
+      implicit none
+      integer, intent(out) :: nspec_out
+
+      nspec_out = nspec
+
+  end subroutine pphys_get_num_spec  
+
+  subroutine pphys_get_spec_names(spec_names_out,ispec,len) &
+         bind(C, name="pphys_get_spec_names")
+
+      use network, only : spec_names
+      implicit none
+      integer, intent(in   ) :: ispec
+      integer, intent(inout) :: len
+      integer, intent(inout) :: spec_names_out(len)
+
+      ! Local variables
+      integer   :: i
+
+      len = len_trim(spec_names(ispec+1))
+
+      do i = 1,len
+         spec_names_out(i) = ichar(spec_names(ispec+1)(i:i))
+      end do
+
+  end subroutine pphys_get_spec_names  
+
+  subroutine pphys_get_spec_index(spec_name_in, len, spec_idx) bind(C, name="pphys_get_spec_index")
+
+      use network, only : nspec, spec_names
+      implicit none
+      integer, intent(in) :: len
+      integer, intent(in) :: spec_name_in(len)
+      integer, intent(out) :: spec_idx
+
+      ! Local variables
+      integer   :: i
+      character(len=len) :: spec_name_in_char
+
+     ! do i = 1, len
+     !    spec_name_in_char(i:i) = iachar(spec_name_in(i))
+     ! end do
+
+     ! do i = 1, nspec
+     !    if ( trim(spec_name_in_char) == trim(spec_names(i)) ) then
+     !       spec_idx = i
+     !       return
+     !    endif
+     ! end do
+
+  end subroutine pphys_get_spec_index  
+
   subroutine set_scal_numb(DensityIn, TempIn, TracIn, RhoHIn, &
                            FirstSpecIn, LastSpecIn) &
                            bind(C, name="set_scal_numb")
