@@ -225,9 +225,6 @@ contains
     allocate(RWRK(dvr+dvdr))
     allocate(IWRK(dvi))
 
-    call vode_init(NEQ,0,1,1.d-10,1.d-10,2,&
-            10000,.false.,.false.,.true.,.true.)
-
 !$omp single
     use_eg = 0
     use_mc = 0

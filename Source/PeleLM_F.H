@@ -15,7 +15,7 @@ extern "C" {
 
   void pphys_network_close();
 
-  void pphys_reactor_init(int iE);
+  void pphys_reactor_init(int* iE);
 
   void pphys_reactor_close();
 
@@ -25,13 +25,13 @@ extern "C" {
 
   void pphys_get_num_spec(int* nspec);
 
-  void pphys_get_spec_names(int* spec_names, 
-		  							 int* ispec, 
-									 int* len);
+  void pphys_get_spec_name(int* spec_names, 
+                            int* ispec, 
+                            int* len);
 
   void pphys_get_spec_index(int* spec,
-		  						    int* len,
-		  							 int* idx);
+                            int* len,
+                            int* idx);
 
   void active_control(const amrex::Real* fuelmass,
                           const amrex::Real* time,

@@ -448,7 +448,7 @@ public:
     
 protected:
 
-    void getSpeciesNames ();
+    //void getSpeciesNames ();
     void getElementNames ();
     void getStoichCoeffs ();
 

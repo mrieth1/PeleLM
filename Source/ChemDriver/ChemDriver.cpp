@@ -307,7 +307,7 @@ void
 ChemDriver::initOnce ()
 {
     INITCHEM();
-    getSpeciesNames();
+    //getSpeciesNames();
     getElementNames();
     modify_parameters(*this);
     GETCKDIMPARAMS(&mMaxreac, &mMaxspec, &mMaxelts,  &mMaxord,
@@ -366,22 +366,22 @@ ChemDriver::set_species_Yscales(const std::string& scalesFile)
     set_spec_scal_Y(file.dataPtr(),&len);
 }
 
-void
-ChemDriver::getSpeciesNames()
-{
-    int max_len = GETCKMAXNAMELEN();
-    int* coded = new int[max_len];
-    int Nspec = GETCKNUMSPEC();
-    mSpeciesNames.clear();
-    mSpeciesNames.resize(Nspec);
-    for (int i=0; i<Nspec; ++i)
-    {
-        int ifort = i+1;
-	int len = GETCKSPECNAME(&ifort, coded);
-	mSpeciesNames[i] = decodeStringFromFortran(coded,len);
-    }
-    delete [] coded;
-}
+//void
+//ChemDriver::getSpeciesNames()
+//{
+//    int max_len = GETCKMAXNAMELEN();
+//    int* coded = new int[max_len];
+//    int Nspec = GETCKNUMSPEC();
+//    mSpeciesNames.clear();
+//    mSpeciesNames.resize(Nspec);
+//    for (int i=0; i<Nspec; ++i)
+//    {
+//        int ifort = i+1;
+//	int len = GETCKSPECNAME(&ifort, coded);
+//	mSpeciesNames[i] = decodeStringFromFortran(coded,len);
+//    }
+//    delete [] coded;
+//}
 
 void
 ChemDriver::getElementNames()

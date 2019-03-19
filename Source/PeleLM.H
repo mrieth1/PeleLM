@@ -134,6 +134,10 @@ public:
   // Cleanup data descriptors at end of run.
   //
   static void variableCleanUp ();
+
+  static void getSpeciesNames(amrex::Vector<std::string>& spn);
+
+  static int getSpeciesIdx(const std::string& spName);
     
 protected:
 
@@ -456,6 +460,7 @@ private:
   static int         first_spec;
   static int         last_spec;
   static int         nspecies;
+  static amrex::Vector<std::string> spec_names;
   static int         floor_species;
   static ChemDriver* chemSolve;
   static amrex::Real        rgas;

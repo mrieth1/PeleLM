@@ -160,7 +160,7 @@ contains
       integer i,j,n
       integer ndummy
       REAL_T tdummy,P1atm,RU,RUC,Pressure_tmp
-      REAL_T RHO_CGS, CPB_CGS, scal, HMIX_CGS, H_CGS(maxspec)
+      REAL_T RHO_CGS, scal, HMIX_CGS, H_CGS(maxspec)
 
       ndummy = Nspec
       tdummy = 0.
@@ -465,7 +465,7 @@ contains
 #include "cdwrk.H"
 
       integer lo(SDIM), hi(SDIM)
-      integer namlen, maxlen
+      integer namlen
       integer namenc(namlen)
       integer DIMDEC(Celt)
       integer DIMDEC(C)
@@ -473,7 +473,7 @@ contains
       REAL_T C(DIMV(C),*)
       integer thenames(maxelts*2)
       logical match
-      integer i, j, k, theidx, n, lout
+      integer i, j, theidx, n
       integer NCF(Nelt,Nspec)
 !     Find index of desired element
       CALL CKSYME(thenames,2)
@@ -515,6 +515,7 @@ contains
           bind(C, name="CONPSOLV_SDC")
 
    use chem_driver
+   use vode_module, only:voderwork,lvoderwork,vodeiwork,lvodeiwork,voderpar,vodeipar
           
       implicit none
 
@@ -548,10 +549,10 @@ contains
       integer nsub, node, strang_fix, Niter, nfails
       character*(maxspnml) name
       REAL_T RTOL, ATOL(maxspec+2), ATOLEPS, TT1, TT2, RU, RUC, P1atm, Ptmp
-      REAL_T Y(maxspec), hmix_ck, Z(maxspec+2), ZP(maxspec+2), Yold(maxspec)
-      REAL_T dtloc, weight, TT1save, rho, rhoInv, h_INIT
-      REAL_T Ct(maxspec),Qt(maxreac), scale, sum
-      REAL_T rhoYtemp(maxspec),rhoYres(maxspec),HMIX_CGS
+      REAL_T Y(maxspec), Z(maxspec+2), ZP(maxspec+2), Yold(maxspec)
+      REAL_T dtloc, weight, TT1save, rho, rhoInv
+      REAL_T Ct(maxspec),Qt(maxreac), sum
+      REAL_T rhoYtemp(maxspec)
       REAL_T,  parameter :: HtoTerrMAX = BL_REAL_E(7.8,-12)
       integer, parameter :: HtoTiterMAX = 20, IOPT = 1, ITASK = 1
       REAL_T res(0:HtoTiterMAX-1), rhooldInv
@@ -660,8 +661,8 @@ contains
                CALL DVODE  &
 #endif
                    (conpFY_sdc, NEQ, Z, TT1, TT2, ITOL, RTOL, ATOL, &
-                   ITASK, ISTATE, IOPT, RWRK(dvbr), dvr, IWRK(dvbi), &
-                   dvi, CONPJ_FILE, MF, RWRK, IWRK)
+                   ITASK, ISTATE, IOPT, voderwork, lvoderwork, vodeiwork, &
+                   lvodeiwork, CONPJ_FILE, MF, voderpar, vodeipar)
 
                if (ISTATE .LE. -1 .or. negative_Y_test .eq. 1) then
 
@@ -709,8 +710,9 @@ contains
                   CALL DVODE &
 #endif
                       (conpFY_sdc, NEQ, Z, TT1, TT2, ITOL, RTOL, ATOL, &
-                      ITASK, ISTATE, IOPT, RWRK(dvbr), dvr, IWRK(dvbi), &
-                      dvi, CONPJ_FILE, MF, RWRK, IWRK)
+                      ITASK, ISTATE, IOPT, voderwork, lvoderwork, vodeiwork, &
+                      lvodeiwork, CONPJ_FILE, MF, voderpar, vodeipar)
+
                   
                   if (ISTATE .LE. -1) then
                      call conpFY_sdc(NEQ, TT1, Z, ZP, RWRK, IWRK)
@@ -1489,7 +1491,7 @@ contains
       
       character*(maxspnml) name      
       integer n, i, j, iH2O, iCO2, iCH4, iCO
-      REAL_T lnT, aP, c0, c1, c2, c3, c4
+      REAL_T aP, c0, c1, c2, c3, c4
       REAL_T T1, T2, T3, T4, Tb4, lnT1, lnT2, lnT3, lnT4, sigma
 
       data sigma / 5.669D-08 /

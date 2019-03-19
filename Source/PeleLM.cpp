@@ -128,6 +128,7 @@ int  PeleLM::RhoRT;
 int  PeleLM::first_spec;
 int  PeleLM::last_spec;
 int  PeleLM::nspecies;
+Vector<std::string>  PeleLM::spec_names;
 int  PeleLM::floor_species;
 int  PeleLM::do_set_rho_to_species_sum;
 Real PeleLM::rgas;
@@ -289,13 +290,42 @@ PeleLM::init_network ()
 void
 PeleLM::init_reactor (int iE)
 {
-	pphys_reactor_init(iE); 
+	pphys_reactor_init(&iE); 
 }
 
 void
 PeleLM::init_transport ()
 {
 	pphys_transport_init(); 
+}
+
+int 
+PeleLM::getSpeciesIdx(const std::string& spName)
+{
+    for (int i=0; i<nspecies; i++) {
+        if (spName == spec_names[i]) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void
+PeleLM::getSpeciesNames(Vector<std::string>& spn)
+{
+    for (int i = 0; i < nspecies; i++) {
+        int len = 20;
+        Vector<int> int_spec_name(len);
+        pphys_get_spec_name(int_spec_name.dataPtr(),&i,&len);
+        char* spec_name = new char[len+1];
+        for (int j = 0; j < len; j++) {
+            spec_name[j] = int_spec_name[j];
+        }
+        spec_name[len] = '\0';
+        //spec_names.push_back(spec_name);
+        spn.push_back(spec_name);
+        delete [] spec_name;
+    }
 }
 
 void

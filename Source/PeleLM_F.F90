@@ -13,6 +13,8 @@
 
 module PeleLM_F
 
+  use, intrinsic :: iso_c_binding
+
   implicit none
 
   private
@@ -59,8 +61,10 @@ contains
   subroutine pphys_reactor_init(iE) bind(C, name="pphys_reactor_init")
 
       use reactor_module, only: reactor_init
+
       implicit none
-      integer :: iE
+
+      integer(c_int),  intent(in   ) :: iE
 
       call reactor_init(iE)
 
@@ -78,20 +82,21 @@ contains
 
       use network, only : nspec
       implicit none
-      integer, intent(out) :: nspec_out
+      integer(c_int), intent(out) :: nspec_out
 
       nspec_out = nspec
 
   end subroutine pphys_get_num_spec  
 
-  subroutine pphys_get_spec_names(spec_names_out,ispec,len) &
-         bind(C, name="pphys_get_spec_names")
+  subroutine pphys_get_spec_name(spec_names_out,ispec,len) &
+             bind(C, name="pphys_get_spec_name")
 
       use network, only : spec_names
+
       implicit none
-      integer, intent(in   ) :: ispec
-      integer, intent(inout) :: len
-      integer, intent(inout) :: spec_names_out(len)
+      integer(c_int), intent(in   ) :: ispec
+      integer(c_int), intent(inout) :: len
+      integer(c_int), intent(inout) :: spec_names_out(len)
 
       ! Local variables
       integer   :: i
@@ -102,7 +107,7 @@ contains
          spec_names_out(i) = ichar(spec_names(ispec+1)(i:i))
       end do
 
-  end subroutine pphys_get_spec_names  
+  end subroutine pphys_get_spec_name  
 
   subroutine pphys_get_spec_index(spec_name_in, len, spec_idx) bind(C, name="pphys_get_spec_index")
 
@@ -113,8 +118,8 @@ contains
       integer, intent(out) :: spec_idx
 
       ! Local variables
-      integer   :: i
-      character(len=len) :: spec_name_in_char
+      !integer   :: i
+      !character(len=len) :: spec_name_in_char
 
      ! do i = 1, len
      !    spec_name_in_char(i:i) = iachar(spec_name_in(i))
@@ -392,7 +397,8 @@ contains
 
 #else
 
-    REAL_T vslope,slocal,V_new,dVmax,dVmin
+    REAL_T slocal,V_new,dVmax,dVmin
+    !REAL_T vslope,
     integer ierr
     REAL_T r1,r2,r3,r4,r5,r6,r7
     REAL_T alpha,xsmb,vpmax,exp1 
