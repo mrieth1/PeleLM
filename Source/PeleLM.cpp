@@ -128,6 +128,7 @@ int  PeleLM::RhoRT;
 int  PeleLM::first_spec;
 int  PeleLM::last_spec;
 int  PeleLM::nspecies;
+int  PeleLM::nreactions;
 Vector<std::string>  PeleLM::spec_names;
 int  PeleLM::floor_species;
 int  PeleLM::do_set_rho_to_species_sum;
@@ -505,10 +506,6 @@ PeleLM::Initialize ()
     if (verbose) amrex::Print() << "PeleLM::read_params: Using EGLib transport " << '\n';
   }
   chemSolve = new ChemDriver();
-
-  /* PelePhysics */
-  //pphys_transport_init();
-
 
   pp.query("turbFile",turbFile);
 
@@ -1012,7 +1009,8 @@ PeleLM::init_once ()
   // This logic should work in both cases.
   //
   first_spec =  Density + 1;
-  last_spec  = first_spec + getChemSolve().numSpecies() - 1;
+  // Got to make sure nspecies is initialized though
+  last_spec  = first_spec + nspecies - 1;
     
   for (int i = first_spec; i <= last_spec; i++)
     if (advectionType[i] != Conservative)
@@ -1040,7 +1038,7 @@ PeleLM::init_once ()
                           &var_diff, &constant_rhoD_val,
                           &prandtl,  &schmidt, &unity_Le);
 
-  // initialize default typical values
+  // initialize fortran default typical values
   init_typcals_common();
   //
   // make space for typical values
@@ -1048,7 +1046,8 @@ PeleLM::init_once ()
   typical_values.resize(NUM_STATE,-1); // -ve means don't use for anything
   typical_values[RhoH] = typical_RhoH_value_default;
 
-  const Vector<std::string>& speciesNames = getChemSolve().speciesNames();
+  Vector<std::string> speciesNames;
+  PeleLM::getSpeciesNames(speciesNames);
   ParmParse pp("ht");
   for (int i=0; i<nspecies; ++i) {
     const std::string ppStr = std::string("typValY_") + speciesNames[i];
@@ -1066,8 +1065,8 @@ PeleLM::init_once ()
   //
   // Get universal gas constant from Fortran.
   //
-  rgas = getChemSolve().getRuniversal();
-  P1atm_MKS = getChemSolve().getP1atm_MKS();
+  rgas = pphys_getRuniversal();
+  P1atm_MKS = pphys_getP1atm_MKS();
 
   if (rgas <= 0.0)
   {
@@ -1082,10 +1081,10 @@ PeleLM::init_once ()
   //
   // Chemistry.
   //
-  int ydot_good = RhoYdot_Type >= 0 && RhoYdot_Type <desc_lst.size()
-                                                     && RhoYdot_Type != Divu_Type
-                                                     && RhoYdot_Type != Dsdt_Type
-                                                     && RhoYdot_Type != State_Type;
+  int ydot_good = RhoYdot_Type >= 0 && RhoYdot_Type <  desc_lst.size()
+                                    && RhoYdot_Type != Divu_Type
+                                    && RhoYdot_Type != Dsdt_Type
+                                    && RhoYdot_Type != State_Type;
   //
   // This is the minimum number of boxes per MPI proc that I want
   // when chopping up chemistry work.
@@ -1131,7 +1130,8 @@ PeleLM::init_once ()
   pp.query("plot_reactions",plot_reactions);
   if (plot_reactions)
   {
-    auxDiag_names["REACTIONS"].resize(getChemSolve().numReactions());
+    auxDiag_names["REACTIONS"].resize(nreactions);
+    amrex::Print() << "nreactions "<< nreactions << '\n';
     for (int i = 0; i < auxDiag_names["REACTIONS"].size(); ++i)
       auxDiag_names["REACTIONS"][i] = amrex::Concatenate("R",i+1);
     amrex::Print() << "***** Make sure to increase amr.regrid_int !!!!!" << '\n';
@@ -1216,8 +1216,10 @@ PeleLM::set_typical_values(bool is_restart)
   {
     const int nComp = typical_values.size();
 
-    if (is_restart)
-    {
+    if (is_restart) {
+      //
+      // Typical values stored in the checkpoint file
+      //
       BL_ASSERT(nComp==NUM_STATE);
 
       for (int i=0; i<nComp; ++i)
@@ -1242,8 +1244,7 @@ PeleLM::set_typical_values(bool is_restart)
 
       ParallelDescriptor::ReduceRealMax(typical_values.dataPtr(),nComp); //FIXME: better way?
     }
-    else
-    {
+    else  {
       //
       // Check fortan common values, override values set above if fortran values > 0.
       //
@@ -1253,8 +1254,9 @@ PeleLM::set_typical_values(bool is_restart)
         
       for (int i=0; i<nComp; ++i)
       {
-        if (tvTmp[i] > 0)
+        if (tvTmp[i] > 0) {
           typical_values[i] = tvTmp[i];
+	}
       }
     }
     //
@@ -1265,7 +1267,7 @@ PeleLM::set_typical_values(bool is_restart)
          it!=End;
          ++it)
     {
-      const int idx = getChemSolve().index(it->first);
+      const int idx = getSpeciesIdx(it->first);
       if (idx>=0)
       {
         typical_values[first_spec+idx] = it->second;
@@ -1298,10 +1300,9 @@ PeleLM::set_typical_values(bool is_restart)
     amrex::Print() << "\tDensity: " << typical_values[Density] << '\n';
     amrex::Print() << "\tTemp:    " << typical_values[Temp]    << '\n';
     amrex::Print() << "\tRhoH:    " << typical_values[RhoH]    << '\n';
-    const Vector<std::string>& names = getChemSolve().speciesNames();
     for (int i=0; i<nspecies; ++i)
       {
-        amrex::Print() << "\tY_" << names[i] << ": " << typical_values[first_spec+i] << '\n';
+        amrex::Print() << "\tY_" << spec_names[i] << ": " << typical_values[first_spec+i] <<'\n';
       }
   }
 }
@@ -1339,7 +1340,7 @@ PeleLM::reset_typical_values (const MultiFab& S)
          it!=End;
          ++it)
     {
-      const int idx = getChemSolve().index(it->first);
+      const int idx = getSpeciesIdx(it->first);
       if (idx>=0)
       {
         typical_values[first_spec+idx] = it->second;
@@ -1372,10 +1373,9 @@ PeleLM::reset_typical_values (const MultiFab& S)
   amrex::Print() << "\tDensity:  " << typical_values[Density] << '\n';
   amrex::Print() << "\tTemp:     " << typical_values[Temp]    << '\n';
   amrex::Print() << "\tRhoH:     " << typical_values[RhoH]    << '\n';
-  const Vector<std::string>& names = getChemSolve().speciesNames();
   for (int i=0; i<nspecies; ++i)
     {
-      amrex::Print() << "\tY_" << names[i] << ": " << typical_values[first_spec+i] << '\n';
+      amrex::Print() << "\tY_" << spec_names[i] << ": " << typical_values[first_spec+i] <<'\n';
     }
 }
 
@@ -1587,7 +1587,8 @@ PeleLM::initData ()
     
   AmrData&                  amrData     = dataServices.AmrDataRef();
   const int                 nspecies    = getChemSolve().numSpecies();
-  const Vector<std::string>& names       = getChemSolve().speciesNames();   
+  Vector<std::string> names;
+  PeleLM::getSpeciesNames(names);
   Vector<std::string>        plotnames   = amrData.PlotVarNames();
 
   int idT = -1, idX = -1;
@@ -2321,7 +2322,7 @@ PeleLM::sum_integrated_quantities ()
 
   if (verbose) amrex::Print() << "TIME= " << time << " MASS= " << mass;
 
-  if (getChemSolve().index(fuelName) >= 0)
+  if (getSpeciesIdx(fuelName) >= 0)
   {
     int MyProc  = ParallelDescriptor::MyProc();
     int step    = parent->levelSteps(0);
@@ -2410,7 +2411,7 @@ PeleLM::sum_integrated_quantities ()
     }
   }
 
-  if (getChemSolve().index(productName) >= 0)
+  if (getSpeciesIdx(productName) >= 0)
   {
       int MyProc  = ParallelDescriptor::MyProc();
       int step    = parent->levelSteps(0);
@@ -3966,7 +3967,8 @@ PeleLM::temperature_stats (MultiFab& S)
     amrex::Print() << "  Min,max rhoh = " << tdhmin[2] << ", " << tdhmax[2] << '\n';
     if (aNegY)
       {
-        const Vector<std::string>& names = PeleLM::getChemSolve().speciesNames();
+        Vector<std::string> names;
+        PeleLM::getSpeciesNames(names);
         amrex::Print() << "  Species w/min < 0: ";
         for (int i = 0; i < nspecies; ++i)
           if (minY[i] < 0)
@@ -4810,7 +4812,7 @@ PeleLM::advance (Real time,
   {
     for (int j=0; j<consumptionName.size(); ++j)
     {
-      int consumptionComp = getChemSolve().index(consumptionName[j]);
+      int consumptionComp = getSpeciesIdx(consumptionName[j]);
       MultiFab::Copy((*auxDiag["CONSUMPTION"]),get_new_data(RhoYdot_Type),consumptionComp,j,1,0);
       auxDiag["CONSUMPTION"]->mult(-1,j,1); // Convert production to consumption
     }
@@ -7402,7 +7404,8 @@ PeleLM::setPlotVariables ()
 {
   AmrLevel::setPlotVariables();
 
-  const Vector<std::string>& names = getChemSolve().speciesNames();
+  Vector<std::string> names;
+  PeleLM::getSpeciesNames(names);
 
   ParmParse pp("ht");
 

@@ -460,6 +460,7 @@ private:
   static int         first_spec;
   static int         last_spec;
   static int         nspecies;
+  static int         nreactions;
   static amrex::Vector<std::string> spec_names;
   static int         floor_species;
   static ChemDriver* chemSolve;

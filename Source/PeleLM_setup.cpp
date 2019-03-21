@@ -452,6 +452,7 @@ PeleLM::variableSetUp ()
 
   FirstSpec = ++counter;
   pphys_get_num_spec(&nspecies);
+  nreactions = pphys_numReactions();
   counter  += nspecies - 1;
   RhoH = ++counter;
   Trac = ++counter;
@@ -462,9 +463,9 @@ PeleLM::variableSetUp ()
   NUM_STATE = ++counter;
   NUM_SCALARS = NUM_STATE - Density;
 
-  //const Vector<std::string>& names = getChemSolve().speciesNames();
   getSpeciesNames(spec_names); 
 
+  amrex::Print() << nreactions << " Reactions in mechanism \n";
   amrex::Print() << nspecies << " Chemical species interpreted:\n { ";
   for (int i = 0; i < nspecies; i++)
     amrex::Print() << spec_names[i] << ' ' << ' ';
@@ -489,14 +490,16 @@ PeleLM::variableSetUp ()
   // Set scale of chemical components, used in ODE solves
   //
   std::string speciesScaleFile; pp.query("speciesScaleFile",speciesScaleFile);
-  if (! speciesScaleFile.empty())
-  {
-    amrex::Print() << "  Setting scale values for chemical species\n\n";
-    getChemSolve().set_species_Yscales(speciesScaleFile);
-  }
+
+  // Fill spec_scalY that is not used anywhere 
+  //if (! speciesScaleFile.empty())
+  //{
+  //  amrex::Print() << "  Setting scale values for chemical species\n\n";
+  //  getChemSolve().set_species_Yscales(speciesScaleFile);
+  //}
   int verbose_vode=0; pp.query("verbose_vode",verbose_vode);
   if (verbose_vode!=0)
-    getChemSolve().set_verbose_vode();
+    pphys_set_verbose_vode();
 
   int fuelID = getSpeciesIdx(fuelName);
   int oxidID = getSpeciesIdx(oxidizerName);
@@ -898,7 +901,7 @@ PeleLM::variableSetUp ()
   //
   // Tag region of interesting chemistry.
   //
-  const int idx = getChemSolve().index(flameTracName);
+  const int idx = getSpeciesIdx(flameTracName);
   if (idx >= 0)
   {
     amrex::Print() << "Flame tracer will be " << flameTracName << '\n';

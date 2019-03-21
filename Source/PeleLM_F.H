@@ -33,6 +33,14 @@ extern "C" {
                             int* len,
                             int* idx);
 
+  amrex::Real pphys_getRuniversal();
+
+  amrex::Real pphys_getP1atm_MKS();
+
+  int pphys_numReactions();
+
+  void pphys_set_verbose_vode ();
+
   void active_control(const amrex::Real* fuelmass,
                           const amrex::Real* time,
                           const amrex::Real* crsedt, 

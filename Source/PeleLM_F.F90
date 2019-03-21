@@ -28,6 +28,7 @@ contains
 ! Init/Close PelePhysics network, transport, reaction. Similar to PeleC.  
 
   subroutine pphys_network_init() bind(C, name="pphys_network_init")                                                                                         
+
      use network, only: network_init
      
      call network_init()
@@ -63,7 +64,6 @@ contains
       use reactor_module, only: reactor_init
 
       implicit none
-
       integer(c_int),  intent(in   ) :: iE
 
       call reactor_init(iE)
@@ -81,6 +81,7 @@ contains
   subroutine pphys_get_num_spec(nspec_out) bind(C, name="pphys_get_num_spec")
 
       use network, only : nspec
+
       implicit none
       integer(c_int), intent(out) :: nspec_out
 
@@ -109,30 +110,46 @@ contains
 
   end subroutine pphys_get_spec_name  
 
-  subroutine pphys_get_spec_index(spec_name_in, len, spec_idx) bind(C, name="pphys_get_spec_index")
+  function pphys_getRuniversal() bind(C, name="pphys_getRuniversal") result(RUNIV)
 
-      use network, only : nspec, spec_names
-      implicit none
-      integer, intent(in) :: len
-      integer, intent(in) :: spec_name_in(len)
-      integer, intent(out) :: spec_idx
+    implicit none
+    double precision Ruc, Pa, RUNIV
 
-      ! Local variables
-      !integer   :: i
-      !character(len=len) :: spec_name_in_char
+    call CKRP(RUNIV,Ruc,Pa)
+!     1 erg/(mole.K) = 1.e-4 J/(kmole.K)
+    RUNIV = RUNIV*1.d-4
 
-     ! do i = 1, len
-     !    spec_name_in_char(i:i) = iachar(spec_name_in(i))
-     ! end do
+  end function pphys_getRuniversal
 
-     ! do i = 1, nspec
-     !    if ( trim(spec_name_in_char) == trim(spec_names(i)) ) then
-     !       spec_idx = i
-     !       return
-     !    endif
-     ! end do
+  function pphys_getP1atm_MKS() bind(C, name="pphys_getP1atm_MKS") result(P1ATM)
 
-  end subroutine pphys_get_spec_index  
+    implicit none
+    double precision Ru, Ruc, P1ATM
+
+    call CKRP(Ru,Ruc,P1ATM)
+!     1 N/(m.m) = 0.1 dyne/(cm.cm)
+    P1ATM = P1ATM*1.d-1
+
+  end function pphys_getP1atm_MKS
+
+  function pphys_numReactions() bind(C, name="pphys_numReactions") result(NR)
+
+    implicit none
+    integer Nelt,Nspec,NR,Nfit
+      
+    call CKINDX(Nelt,Nspec,NR,Nfit)
+
+  end function pphys_numReactions
+
+  subroutine pphys_set_verbose_vode() bind(C, name="pphys_set_verbose_vode")
+
+    use vode_module, only: verbose
+
+    implicit none
+
+    verbose = 5
+
+  end subroutine pphys_set_verbose_vode
 
   subroutine set_scal_numb(DensityIn, TempIn, TracIn, RhoHIn, &
                            FirstSpecIn, LastSpecIn) &
