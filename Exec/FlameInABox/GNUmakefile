@@ -11,7 +11,7 @@ DIM             = 2
 COMP            = gnu
 DEBUG           = TRUE
 USE_MPI         = TRUE
-USE_OMP         = FALSE
+USE_OMP         = TRUE
 PRECISION       = DOUBLE
 VERBOSE         = FALSE
 
