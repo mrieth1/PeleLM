@@ -123,7 +123,7 @@ public:
   //    PeleLM public static functions                                //
   ////////////////////////////////////////////////////////////////////////////
 
-  static ChemDriver& getChemSolve () { return *chemSolve; }
+  //static ChemDriver& getChemSolve () { return *chemSolve; }
   //
   // Define data descriptors.
   //
@@ -386,8 +386,83 @@ private:
   static void init_once ();
 
   static void init_network ();
+
   static void init_reactor (int iE);
+
   static void init_transport ();
+
+  bool solveChemistry_sdc(amrex::FArrayBox&        rhoYnew,
+                            amrex::FArrayBox&        rhoHnew,
+                            amrex::FArrayBox&        Tnew,
+                            const amrex::FArrayBox&  rhoYold,
+                            const amrex::FArrayBox&  rhoHold,
+                            const amrex::FArrayBox&  Told,
+                            const amrex::FArrayBox&  const_src,
+                            amrex::FArrayBox&        FuncCount,
+                            const amrex::Box&        box,
+                            int               sComprhoY,
+                            int               sComprhoH,
+                            int               sCompT,
+                            amrex::Real              dt,
+                            amrex::FArrayBox*        chemDiag,
+                            bool              use_stiff_solver = true) const;
+
+  void reactionRateRhoY_pphys(amrex::FArrayBox&       RhoYdot,
+                          const amrex::FArrayBox& RhoY,
+                          const amrex::FArrayBox& RhoH,
+                          const amrex::FArrayBox& T,
+                          const amrex::Box&       box,
+                          int              sCompRhoY,
+                          int              sCompRhoH,
+                          int              sCompT,
+                          int              sCompRhoYdot) const;
+
+  void getPGivenRTY_pphys(amrex::FArrayBox&       p,
+                         const amrex::FArrayBox& Rho,
+                         const amrex::FArrayBox& T,
+                         const amrex::FArrayBox& Y,
+                         const amrex::Box&       box,
+                         int              sCompR,
+                         int              sCompT,
+                         int              sCompY,
+                         int              sCompP) const;
+
+  void getMwmixGivenY_pphys(amrex::FArrayBox&       mwmix,
+                         const amrex::FArrayBox& Y,
+                         const amrex::Box&       box,
+                         int              sCompY,
+                         int              sCompMw) const;
+
+  void getHmixGivenTY_pphys (amrex::FArrayBox&       hmix,
+                         const amrex::FArrayBox& T,
+                         const amrex::FArrayBox& Y,
+                         const amrex::Box&       box,
+                         int              sCompT,
+                         int              sCompY,
+                         int              sCompH) const;
+
+  void getHGivenT_pphys (amrex::FArrayBox&       h,
+                     const amrex::FArrayBox& T,
+                     const amrex::Box&       box,
+                     int              sCompT,
+                     int              sCompH) const;
+
+  void getCpmixGivenTY_pphys (amrex::FArrayBox&       cpmix,
+                          const amrex::FArrayBox& T,
+                          const amrex::FArrayBox& Y,
+                          const amrex::Box&       box,
+                          int              sCompT,
+                          int              sCompY,
+                          int              sCompCp) const;
+
+  //int getTGivenHY_pphys (amrex::FArrayBox&       T,
+  //                   const amrex::FArrayBox& H,
+  //                   const amrex::FArrayBox& Y,
+  //                   const amrex::Box&       box,
+  //                   int              sCompH,
+  //                   int              sCompY,
+  //                   int              sCompT); // const;
+  //                   //const amrex::Real&      errMAX = -1) const;
 
   static void RhoH_to_Temp (amrex::MultiFab& S,
                             int       nGrow = 0,

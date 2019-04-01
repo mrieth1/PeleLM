@@ -262,7 +262,7 @@ PeleLM::compute_rhohmix (Real      time,
         state.mult(tmp,0,sCompY+k,1);
       }
 	    
-      getChemSolve().getHmixGivenTY(rhohmix[mfi],state,state,bx,
+      getHmixGivenTY_pphys(rhohmix[mfi],state,state,bx,
                                     sCompT,sCompY,sCompH);
       //
       // Convert hmix to rho*hmix
@@ -299,6 +299,220 @@ PeleLM::init_transport ()
 {
 	pphys_transport_init(); 
 }
+
+bool
+PeleLM::solveChemistry_sdc(FArrayBox&        rhoYnew,
+		       FArrayBox&        rhoHnew,
+		       FArrayBox&        Tnew,
+		       const FArrayBox&  rhoYold,
+		       const FArrayBox&  rhoHold,
+		       const FArrayBox&  Told,
+		       const FArrayBox&  const_src,
+		       FArrayBox&        FuncCount,
+		       const Box&        box,
+		       int               sComprhoY,
+		       int               sComprhoH,
+		       int               sCompT,
+		       Real              dt,
+		       FArrayBox*        chemDiag,
+                       bool              use_stiff_solver) const
+{
+    BL_ASSERT(sComprhoY+nspecies <= rhoYnew.nComp());
+    BL_ASSERT(sComprhoY+nspecies <= rhoYold.nComp());
+    BL_ASSERT(sComprhoH < rhoHnew.nComp());
+    BL_ASSERT(sComprhoH < rhoHold.nComp());
+    BL_ASSERT(sCompT    < Tnew.nComp());
+    BL_ASSERT(sCompT    < Told.nComp());
+    
+    BL_ASSERT(rhoYnew.box().contains(box) && rhoYold.box().contains(box));
+    BL_ASSERT(rhoHnew.box().contains(box) && rhoHold.box().contains(box));
+    BL_ASSERT(Tnew.box().contains(box)    && Told.box().contains(box));
+
+    // do_diag is no longer used
+    const int do_diag  = (chemDiag!=0);
+    Real*     diagData = do_diag ? chemDiag->dataPtr() : 0;
+    const int do_stiff = (use_stiff_solver);
+
+    int success = pphys_CONPsolv_SDC(box.loVect(), box.hiVect(),
+				    rhoYnew.dataPtr(sComprhoY), ARLIM(rhoYnew.loVect()),   ARLIM(rhoYnew.hiVect()),
+				    rhoHnew.dataPtr(sComprhoH), ARLIM(rhoHnew.loVect()),   ARLIM(rhoHnew.hiVect()),
+				    Tnew.dataPtr(sCompT),       ARLIM(Tnew.loVect()),      ARLIM(Tnew.hiVect()),
+				    rhoYold.dataPtr(sComprhoY), ARLIM(rhoYold.loVect()),   ARLIM(rhoYold.hiVect()),
+				    rhoHold.dataPtr(sComprhoH), ARLIM(rhoHold.loVect()),   ARLIM(rhoHold.hiVect()),
+				    Told.dataPtr(sCompT),       ARLIM(Told.loVect()),      ARLIM(Told.hiVect()),
+				    const_src.dataPtr(0),       ARLIM(const_src.loVect()), ARLIM(const_src.hiVect()),
+				    FuncCount.dataPtr(),        ARLIM(FuncCount.loVect()), ARLIM(FuncCount.hiVect()),
+				    &dt, diagData, &do_diag, &do_stiff);
+    return success > 0;
+}
+
+void
+PeleLM::reactionRateRhoY_pphys(FArrayBox&       RhoYdot,
+                             const FArrayBox& RhoY,
+                             const FArrayBox& RhoH,
+                             const FArrayBox& T,
+                             const Box&       box,
+                             int              sCompRhoY,
+                             int              sCompRhoH,
+                             int              sCompT,
+                             int              sCompRhoYdot) const
+{
+    BL_ASSERT(RhoYdot.nComp() >= sCompRhoYdot + nspecies);
+    BL_ASSERT(RhoY.nComp() >= sCompRhoY + nspecies);
+    BL_ASSERT(RhoH.nComp() > sCompRhoH);
+    BL_ASSERT(T.nComp() > sCompT);
+
+    const Box& mabx = RhoY.box();
+    const Box& mbbx = RhoH.box();
+    const Box& mcbx = T.box();
+    const Box& mobx = RhoYdot.box();
+    
+    const Box& ovlp = box & mabx & mbbx & mcbx & mobx;
+    if( ! ovlp.ok() ) return;
+    
+    pphys_RRATERHOY(ovlp.loVect(), ovlp.hiVect(),
+                   RhoY.dataPtr(sCompRhoY),       ARLIM(mabx.loVect()), ARLIM(mabx.hiVect()),
+                   RhoH.dataPtr(sCompRhoH),       ARLIM(mbbx.loVect()), ARLIM(mbbx.hiVect()),
+                   T.dataPtr(sCompT),             ARLIM(mcbx.loVect()), ARLIM(mcbx.hiVect()),
+                   RhoYdot.dataPtr(sCompRhoYdot), ARLIM(mobx.loVect()), ARLIM(mobx.hiVect()) );
+}
+
+void
+PeleLM::getPGivenRTY_pphys(FArrayBox&       p,
+			    const FArrayBox& Rho,
+			    const FArrayBox& T,
+			    const FArrayBox& Y,
+			    const Box&       box,
+			    int              sCompR,
+			    int              sCompT,
+			    int              sCompY,
+			    int              sCompP) const
+{
+    BL_ASSERT(p.nComp() > sCompP);
+    BL_ASSERT(Rho.nComp() > sCompR);
+    BL_ASSERT(T.nComp() > sCompT);
+    BL_ASSERT(Y.nComp() >= sCompY+nspecies);
+    
+    BL_ASSERT(p.box().contains(box));
+    BL_ASSERT(Rho.box().contains(box));
+    BL_ASSERT(T.box().contains(box));
+    BL_ASSERT(Y.box().contains(box));
+    
+    pphys_PfromRTY(box.loVect(), box.hiVect(),
+		  p.dataPtr(sCompP),   ARLIM(p.loVect()),   ARLIM(p.hiVect()),
+		  Rho.dataPtr(sCompR), ARLIM(Rho.loVect()), ARLIM(Rho.hiVect()),
+		  T.dataPtr(sCompT),   ARLIM(T.loVect()),   ARLIM(T.hiVect()),
+		  Y.dataPtr(sCompY),   ARLIM(Y.loVect()),   ARLIM(Y.hiVect()));
+}
+
+void
+PeleLM::getHmixGivenTY_pphys(FArrayBox&       hmix,
+			      const FArrayBox& T,
+			      const FArrayBox& Y,
+			      const Box&       box,
+			      int              sCompT,
+			      int              sCompY,
+			      int              sCompH) const
+{
+    BL_ASSERT(hmix.nComp() > sCompH);
+    BL_ASSERT(T.nComp() > sCompT);
+    BL_ASSERT(Y.nComp() >= sCompY+nspecies);
+    
+    BL_ASSERT(hmix.box().contains(box));
+    BL_ASSERT(T.box().contains(box));
+    BL_ASSERT(Y.box().contains(box));
+    
+    pphys_HMIXfromTY(box.loVect(), box.hiVect(),
+		    hmix.dataPtr(sCompH),ARLIM(hmix.loVect()), ARLIM(hmix.hiVect()),
+		    T.dataPtr(sCompT),   ARLIM(T.loVect()),    ARLIM(T.hiVect()),
+		    Y.dataPtr(sCompY),   ARLIM(Y.loVect()),    ARLIM(Y.hiVect()));
+}
+
+void
+PeleLM::getHGivenT_pphys(FArrayBox&       h,
+			  const FArrayBox& T,
+			  const Box&       box,
+			  int              sCompT,
+			  int              sCompH) const
+{
+    BL_ASSERT(h.nComp() >= sCompH + nspecies);
+    BL_ASSERT(T.nComp() > sCompT);
+
+    BL_ASSERT(h.box().contains(box));
+    BL_ASSERT(T.box().contains(box));
+    
+    pphys_HfromT(box.loVect(), box.hiVect(),
+		h.dataPtr(sCompH), ARLIM(h.loVect()), ARLIM(h.hiVect()),
+		T.dataPtr(sCompT), ARLIM(T.loVect()), ARLIM(T.hiVect()));
+}
+
+void
+PeleLM::getMwmixGivenY_pphys(FArrayBox&       mwmix,
+			      const FArrayBox& Y,
+			      const Box&       box,
+			      int              sCompY,
+			      int              sCompMw) const
+{
+    BL_ASSERT(mwmix.nComp() > sCompMw);
+    BL_ASSERT(Y.nComp() >= sCompY+nspecies);
+
+    BL_ASSERT(mwmix.box().contains(box));
+    BL_ASSERT(Y.box().contains(box));
+    
+    pphys_MWMIXfromY(box.loVect(), box.hiVect(),
+		    mwmix.dataPtr(sCompMw),ARLIM(mwmix.loVect()), ARLIM(mwmix.hiVect()),
+		    Y.dataPtr(sCompY),     ARLIM(Y.loVect()),     ARLIM(Y.hiVect()));
+}
+
+void
+PeleLM::getCpmixGivenTY_pphys(FArrayBox&       cpmix,
+			       const FArrayBox& T,
+			       const FArrayBox& Y,
+			       const Box&       box,
+			       int              sCompT,
+			       int              sCompY,
+			       int              sCompCp) const
+{
+    BL_ASSERT(cpmix.nComp() > sCompCp);
+    BL_ASSERT(T.nComp() > sCompT);
+    BL_ASSERT(Y.nComp() >= sCompY+nspecies);
+
+    BL_ASSERT(cpmix.box().contains(box));
+    BL_ASSERT(T.box().contains(box));
+    BL_ASSERT(Y.box().contains(box));
+    
+    pphys_CPMIXfromTY(box.loVect(), box.hiVect(),
+		     cpmix.dataPtr(sCompCp),ARLIM(cpmix.loVect()), ARLIM(cpmix.hiVect()),
+		     T.dataPtr(sCompT),     ARLIM(T.loVect()),     ARLIM(T.hiVect()),
+		     Y.dataPtr(sCompY),     ARLIM(Y.loVect()),     ARLIM(Y.hiVect()));
+}
+
+static
+int getTGivenHY_pphys(FArrayBox&       T,
+                        const FArrayBox& H,
+                        const FArrayBox& Y,
+                        const Box&       box,
+                        int              sCompH,
+                        int              sCompY,
+                        int              sCompT) //const
+                        //const Real&      errMAX) const
+{
+    BL_ASSERT(T.nComp() > sCompT);
+    BL_ASSERT(H.nComp() > sCompH);
+    BL_ASSERT(Y.nComp() >= sCompY+numSpecies());
+    
+    BL_ASSERT(T.box().contains(box));
+    BL_ASSERT(H.box().contains(box));
+    BL_ASSERT(Y.box().contains(box));
+
+    //Real solveTOL = (errMAX<0 ? mHtoTerrMAX : errMAX);
+    
+    return pphys_TfromHY(box.loVect(), box.hiVect(),
+			T.dataPtr(sCompT), ARLIM(T.loVect()), ARLIM(T.hiVect()),
+			H.dataPtr(sCompH), ARLIM(H.loVect()), ARLIM(H.hiVect()),
+			Y.dataPtr(sCompY), ARLIM(Y.loVect()), ARLIM(Y.hiVect()));
+}
+
 
 int 
 PeleLM::getSpeciesIdx(const std::string& spName)
@@ -1460,6 +1674,8 @@ PeleLM::estTimeStep ()
     amrex::Print() << "PeleLM::estTimeStep(): timestep reduced from " 
 		   << ns_estdt << " to " << estdt << '\n';
 
+  //amrex::Abort("TEST");
+
   if (verbose > 1)
   {
     const int IOProc   = ParallelDescriptor::IOProcessorNumber();
@@ -1586,7 +1802,8 @@ PeleLM::initData ()
     DataServices::Dispatch(DataServices::ExitRequest, NULL);
     
   AmrData&                  amrData     = dataServices.AmrDataRef();
-  const int                 nspecies    = getChemSolve().numSpecies();
+  int nspecies;
+  pphys_get_num_spec(&nspecies);
   Vector<std::string> names;
   PeleLM::getSpeciesNames(names);
   Vector<std::string>        plotnames   = amrData.PlotVarNames();
@@ -1822,7 +2039,6 @@ PeleLM::compute_instantaneous_reaction_rates (MultiFab&       R,
   const int sCompT       = Temp;
   const int sCompRhoYdot = 0;
     
-  ChemDriver& chem_solve = getChemSolve();
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
@@ -1834,7 +2050,8 @@ PeleLM::compute_instantaneous_reaction_rates (MultiFab&       R,
     const Box& box = mfi.tilebox();
     FArrayBox& rhoYdot = R[mfi];
 
-    chem_solve.reactionRateRhoY(rhoYdot,rhoY,rhoH,T,box,sCompRhoY,sCompRhoH,sCompT,sCompRhoYdot);
+    reactionRateRhoY_pphys(rhoYdot,rhoY,rhoH,T,box,sCompRhoY,sCompRhoH,sCompT,sCompRhoYdot);
+
   }
     
   if ((nGrow>0) && (how == HT_EXTRAP_GROW_CELLS))
@@ -2197,7 +2414,12 @@ PeleLM::post_init (Real stop_time)
       {
         MultiFab&  Divu_new = getLevel(k).get_new_data(Divu_Type);
         getLevel(k).calc_divu(cur_time,dt_save[k],Divu_new);
+
+        //VisMF::Write(Divu_new, "divu");
+        //amrex::Abort("DIVU");
       }
+
+
       if (!hack_noavgdivu)
       {
         for (int k = finest_level-1; k >= 0; k--)
@@ -4028,7 +4250,7 @@ PeleLM::compute_rhoRT (const MultiFab& S,
       for (int k = 0; k < nCompY; k++)
         state.mult(tmp,box,0,sCompY+k,1);
   
-      getChemSolve().getPGivenRTY(p[mfi],state,state,state,box,sCompR,sCompT,sCompY,pComp);
+      getPGivenRTY_pphys(p[mfi],state,state,state,box,sCompR,sCompT,sCompY,pComp);
     }
   }
   
@@ -4834,7 +5056,7 @@ PeleLM::advance (Real time,
         T.setVal(298.15,box);
         
         enthi.resize(box,R.nComp());
-        getChemSolve().getHGivenT(enthi,T,box,0,0);
+        getHGivenT_pphys(enthi,T,box,0,0);
         enthi.mult(R[mfi],box,0,0,R.nComp());
         
         // Form heat release
@@ -5238,9 +5460,9 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       {
         const int s_spec = 0, s_rhoh = nspecies, s_temp = nspecies+2;
 
-        getChemSolve().solveTransient_sdc(rYn,rHn,Tn,rYo,rHo,To,frc,fc,ba[i],
-                                          s_spec,s_rhoh,s_temp,dt,chemDiag,
-					  use_stiff_solver);
+        solveChemistry_sdc(rYn,rHn,Tn,rYo,rHo,To,frc,fc,ba[i],
+                                  s_spec,s_rhoh,s_temp,dt,chemDiag,
+				  use_stiff_solver);
       }
     }
 
@@ -6018,7 +6240,7 @@ PeleLM::mac_sync ()
                                  0,0,1,geom.Domain(),bc_lo,bc_hi);
 	      
             h.resize(ebox,nspecies);
-            getChemSolve().getHGivenT(h,eTemp,ebox,0,0);
+            getHGivenT_pphys(h,eTemp,ebox,0,0);
 	      
             // multiply fluxNULN by h_m
             (*fluxNULN[d])[mfi].mult(h,ebox,0,0,nspecies);
@@ -6377,7 +6599,7 @@ PeleLM::compute_Wbar_fluxes(Real time,
   for (MFIter mfi(rho_and_species,true); mfi.isValid(); ++mfi)
   {
     const Box& gbox = mfi.growntilebox(); // amrex::grow(mfi.tilebox(),nGrowOp);
-    getChemSolve().getMwmixGivenY(Wbar[mfi],rho_and_species[mfi],gbox,1,0);
+    getMwmixGivenY_pphys(Wbar[mfi],rho_and_species[mfi],gbox,1,0);
   }
 
   //
@@ -6438,7 +6660,7 @@ PeleLM::compute_Wbar_fluxes(Real time,
     for (MFIter mfi(rho_and_species_crse,true); mfi.isValid(); ++mfi)
     {
       const Box& box = mfi.growntilebox();
-      getChemSolve().getMwmixGivenY(Wbar_crse[mfi],rho_and_species_crse[mfi],box,1,0);
+      getMwmixGivenY_pphys(Wbar_crse[mfi],rho_and_species_crse[mfi],box,1,0);
     }	  
     crse_br.copyFrom(Wbar_crse,nGrowCrse,0,0,1);
     bndry->setBndryValues(crse_br,0,Wbar,0,0,1,crse_ratio,bc);
@@ -6886,7 +7108,7 @@ PeleLM::calcDiffusivity (const Real time)
       {
         // lambda/cp in RhoH slot
         const int sCompT = 0, sCompY = 1, sCompCp = RhoH-offset;
-        getChemSolve().getCpmixGivenTY(Dfab,Tfab,RYfab,gbox,sCompT,sCompY,sCompCp);
+        getCpmixGivenTY_pphys(Dfab,Tfab,RYfab,gbox,sCompT,sCompY,sCompCp);
         Dfab.invert(1,gbox,sCompCp,1);
         Dfab.mult(Dfab,gbox,Temp-offset,RhoH-offset,1);
       }
@@ -7349,13 +7571,14 @@ int RhoH_to_Temp_DoIt(FArrayBox&       Tfab,
                       int              sCompH,
                       int              sCompY,
                       int              dCompT,
-                      const Real&      htt_hmixTYP,
-                      ChemDriver&      cd)
+                      const Real&      htt_hmixTYP)
+                      //ChemDriver&      cd)
 {
-  const Real eps = cd.getHtoTerrMAX();
-  Real errMAX = eps*htt_hmixTYP;
+  //const Real eps = cd.getHtoTerrMAX();
+  //Real errMAX = eps*htt_hmixTYP;
 
-  int iters = cd.getTGivenHY(Tfab,Hfab,Yfab,box,sCompH,sCompY,dCompT,errMAX);
+  int iters = getTGivenHY_pphys(Tfab,Hfab,Yfab,box,sCompH,sCompY,dCompT);
+  //nt iters = 10;
 
   if (iters < 0)
     amrex::Error("PeleLM::RhoH_to_Temp(fab): error in H->T");
@@ -7391,7 +7614,7 @@ PeleLM::RhoH_to_Temp (FArrayBox& S,
   }    
 
   // we index into Temperature component in S.  H and Y begin with the 0th component
-  int iters = RhoH_to_Temp_DoIt(S,H,Y,box,0,0,Temp,htt_hmixTYP,getChemSolve());
+  int iters = RhoH_to_Temp_DoIt(S,H,Y,box,0,0,Temp,htt_hmixTYP); //,getChemSolve());
 
   if (dominmax)
     FabMinMax(S, box, htt_tempmin, htt_tempmax, Temp, 1);    

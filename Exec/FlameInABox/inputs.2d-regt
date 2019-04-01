@@ -176,3 +176,10 @@ mac.do_outflow_bcs = 0
 fab.format = NATIVE
 
 fabarray.mfiter_tile_size = 8 8 8 
+
+#ns.init_iter=0
+#ns.num_divu_iters=0
+#ns.hack_nochem=1
+#max_step=0
+#ns.do_init_proj=0
+

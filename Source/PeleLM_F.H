@@ -11,6 +11,57 @@ extern "C" {
 
 //PelePhysics stuffs
 
+  int pphys_CONPsolv_SDC(const int* lo, const int* hi,
+	                 amrex::Real* rhoYnew, ARLIM_P(rhoYnlo), ARLIM_P(rhoYnhi),
+	                 amrex::Real* rhoHnew, ARLIM_P(rhoHnlo), ARLIM_P(rhoHnhi),
+	                 amrex::Real* Tnew, ARLIM_P(Tnlo), ARLIM_P(Tnhi),
+	                 const amrex::Real* rhoYold, ARLIM_P(rhoYolo), ARLIM_P(rhoYohi),
+	                 const amrex::Real* rhoHold, ARLIM_P(rhoHolo), ARLIM_P(rhoHohi),
+	                 const amrex::Real* Told, ARLIM_P(Tolo), ARLIM_P(Tohi),
+	                 const amrex::Real* const_src, ARLIM_P(cslo), ARLIM_P(cshi),
+	                 amrex::Real* FuncCount, ARLIM_P(FuncCountlo), ARLIM_P(FuncCounthi),
+	                 const amrex::Real* dt, amrex::Real* diag, 
+                         const int* do_diag, const int* do_stiff);
+
+  void pphys_RRATERHOY(const int* lo, const int* hi,
+                        const amrex::Real* RhoY, ARLIM_P(RhoYlo),    ARLIM_P(RhoYhi),
+                        const amrex::Real* RhoH, ARLIM_P(RhoHlo),    ARLIM_P(RhoHhi),
+                        const amrex::Real* T,    ARLIM_P(Tlo),       ARLIM_P(Thi),
+                        amrex::Real*    RhoYdot, ARLIM_P(RhoYdotlo), ARLIM_P(RhoYdothi) );
+
+  void pphys_PfromRTY(const int* lo, const int* hi,
+		       amrex::Real*       P, ARLIM_P(Plo), ARLIM_P(Phi),
+		       const amrex::Real* R, ARLIM_P(Rlo), ARLIM_P(Rhi),
+		       const amrex::Real* T, ARLIM_P(Tlo), ARLIM_P(Thi),
+		       const amrex::Real* Y, ARLIM_P(Ylo), ARLIM_P(Yhi));
+
+  void pphys_HMIXfromTY(const int* lo, const int* hi,
+			 amrex::Real*    HMIX, ARLIM_P(Hlo), ARLIM_P(Hhi),
+			 const amrex::Real* T, ARLIM_P(Tlo), ARLIM_P(Thi),
+			 const amrex::Real* Y, ARLIM_P(Ylo), ARLIM_P(Yhi));
+
+  void pphys_HfromT(const int* lo, const int* hi,
+		     amrex::Real*       H, ARLIM_P(Hlo), ARLIM_P(Hhi),
+		     const amrex::Real* T, ARLIM_P(Tlo), ARLIM_P(Thi));
+
+  void pphys_MWMIXfromY(const int* lo, const int* hi,
+			 amrex::Real*    MWMIX,ARLIM_P(MWlo),ARLIM_P(MWhi),
+			 const amrex::Real* Y, ARLIM_P(Ylo), ARLIM_P(Yhi));
+
+  void pphys_CPMIXfromTY(const int* lo, const int* hi,
+			  amrex::Real*   CPMIX, ARLIM_P(CPlo), ARLIM_P(CPhi),
+			  const amrex::Real* T, ARLIM_P(Tlo),  ARLIM_P(Thi),
+			  const amrex::Real* Y, ARLIM_P(Ylo),  ARLIM_P(Yhi));
+
+  int pphys_TfromHY(const int* lo, const int* hi,
+		     amrex::Real* T,       ARLIM_P(Tlo), ARLIM_P(Thi),
+		     const amrex::Real* h, ARLIM_P(hlo), ARLIM_P(hhi),
+		     const amrex::Real* Y, ARLIM_P(Ylo), ARLIM_P(Yhi));
+
+  //void pphys_TfromHYpt(amrex::Real* T, const amrex::Real* Hin, const amrex::Real* Yin,
+  //                      const amrex::Real* errMAX, const int* NiterMAX, const amrex::Real* res,
+  //                      int* Niter);
+
   void pphys_network_init();
 
   void pphys_network_close();
@@ -40,6 +91,9 @@ extern "C" {
   int pphys_numReactions();
 
   void pphys_set_verbose_vode ();
+
+  void pphys_calc_src_sdc(int* n, amrex::Real* time,  amrex::Real* temp, 
+		          amrex::Real* Z, amrex::Real* ZP);
 
   void active_control(const amrex::Real* fuelmass,
                           const amrex::Real* time,

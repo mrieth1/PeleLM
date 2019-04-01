@@ -437,7 +437,7 @@ PeleLM::variableSetUp ()
 
   /* PelePhysics */
   init_network();
-  init_reactor(1);
+  init_reactor(2);
   init_transport();
 
   BCRec bc;

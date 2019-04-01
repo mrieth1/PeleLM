@@ -21,7 +21,8 @@ module PeleLM_F
 
   public :: set_scal_numb, get_typical_vals, set_typical_vals, &
             set_ht_visc_common, init_typcals_common, get_pamb, &
-            get_closed_chamber, get_dpdt, set_common, active_control 
+            get_closed_chamber, get_dpdt, set_common, active_control, &
+            pphys_calc_src_sdc 
 
 contains
 
@@ -150,6 +151,51 @@ contains
     verbose = 5
 
   end subroutine pphys_set_verbose_vode
+
+  subroutine pphys_calc_src_sdc(N, TIME, TEMP, Z, ZP) bind(C, name="pphys_calc_src_sdc")
+!
+!     Variables in Z are:  Z(1:K) = rhoY(K) [MKS]
+!                          Z(K+1) = RhoH    [MKS]
+    use network, only : nspec
+
+    implicit none
+
+    integer(c_int), intent(inout)   :: N
+    double precision, intent(in   ) :: TIME, TEMP
+    double precision, intent(in   ) :: Z(nspec+1)
+    double precision, intent(out  ) :: ZP(nspec+1)
+
+    double precision WDOT_CGS(nspec)
+    double precision Y(nspec), CONC_CGS(nspec), MWT(nspec)
+    double precision RHO_MKS, RINV_MKS, THFAC, HMIX_MKS, HMIX_CGS
+    integer :: lierr, K
+
+
+    ! RHO MKS
+    RHO_MKS  = sum(Z(:))
+    RINV_MKS = 1.d0 / RHO_MKS
+    ! MW CGS
+    call CKWT(MWT);
+      
+    do K=1,nspec
+      CONC_CGS(K) = Z(K)/MWT(K)*1.d-3
+      Y(K) = Z(K) * RINV_MKS
+    enddo
+
+    HMIX_MKS = (Z(nspec+1) + 0.0d0*TIME) * RINV_MKS
+    HMIX_CGS = HMIX_MKS * 1.0d4
+    call get_t_given_hy(HMIX_CGS, Y, TEMP, lierr);
+    call CKWC(TEMP,CONC_CGS,WDOT_CGS)
+
+    ZP(Nspec+1) = 0.0d0
+    THFAC = 1.d3
+    do k= 1, Nspec
+      ZP(k) = WDOT_CGS(k) * MWT(k) * THFAC + 0.0d0
+    end do
+      
+  end subroutine pphys_calc_src_sdc
+
+!------------------------------------  
 
   subroutine set_scal_numb(DensityIn, TempIn, TracIn, RhoHIn, &
                            FirstSpecIn, LastSpecIn) &
