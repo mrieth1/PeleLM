@@ -438,7 +438,7 @@ PeleLM::variableSetUp ()
   /* PelePhysics */
   init_network();
   init_reactor(2);
-  init_transport();
+  init_transport(use_tranlib);
 
   BCRec bc;
   //
@@ -504,11 +504,13 @@ PeleLM::variableSetUp ()
   int fuelID = getSpeciesIdx(fuelName);
   int oxidID = getSpeciesIdx(oxidizerName);
   int prodID = getSpeciesIdx(productName);
+  int bathID = getSpeciesIdx("N2");
 
   amrex::Print() << " fuel name " << fuelName << std::endl;
   amrex::Print() << " index for fuel and oxidizer " << fuelID << " " << oxidID << std::endl;
+  amrex::Print() << " index for bath " << bathID << std::endl;
 
-  set_prob_spec(&fuelID, &oxidID, &prodID, &nspecies);
+  set_prob_spec(&bathID, &fuelID, &oxidID, &prodID, &nspecies);
   //
   // Get a species to use as a flame tracker.
   //

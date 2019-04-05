@@ -17,12 +17,15 @@ module PeleLM_F
 
   implicit none
 
+  integer :: use_eg
+
   private
 
   public :: set_scal_numb, get_typical_vals, set_typical_vals, &
             set_ht_visc_common, init_typcals_common, get_pamb, &
             get_closed_chamber, get_dpdt, set_common, active_control, &
-            pphys_calc_src_sdc 
+            pphys_calc_src_sdc, pphys_getP1atm_MKS, &
+            pphys_get_spec_name2 
 
 contains
 
@@ -44,11 +47,15 @@ contains
 
   end subroutine pphys_network_close
 
-  subroutine pphys_transport_init() bind(C, name="pphys_transport_init")
+  subroutine pphys_transport_init(ieg) bind(C, name="pphys_transport_init")
 
      use transport_module, only: transport_init
 
+     implicit none
+     integer(c_int), intent(in   ) :: ieg
+
      call transport_init()
+     use_eg = ieg
 
   end subroutine pphys_transport_init  
 
@@ -111,6 +118,53 @@ contains
 
   end subroutine pphys_get_spec_name  
 
+  subroutine pphys_get_spec_name2(name, j)
+  
+    implicit none
+
+#include "cdwrk.H"
+
+    integer i, j
+    integer coded(maxspnml), len
+    character*(maxspnml) name
+
+    print *, "In 'pphys_get_spec_name2' bef call to pphys_getckspecname",maxspnml, len
+
+    len = pphys_getckspecname(j, coded)
+    do i = 1, maxspnml
+      name(i:i) = ' '
+    end do
+    do i = 1, len
+      name(i:i) = char(coded(i))
+    end do
+    
+  end subroutine pphys_get_spec_name2
+
+  integer function pphys_getckspecname(i, coded)
+  
+    implicit none
+      
+#include "cdwrk.H"
+
+    integer i
+    integer coded(*)
+    integer names(maxspec*maxspnml)
+    integer j, str_len
+    str_len = 0
+    call CKSYMS(names, maxspnml)
+    do j = 1, maxspnml
+      coded(j) = names(maxspnml*(i-1)+j)
+    end do
+    do j = 1, maxspnml
+      if (coded(j).eq.ICHAR(' ')) then
+        str_len = j
+        exit
+      endif 
+    end do
+    pphys_getckspecname = str_len - 1
+ 
+  end function pphys_getckspecname
+
   function pphys_getRuniversal() bind(C, name="pphys_getRuniversal") result(RUNIV)
 
     implicit none
@@ -172,7 +226,7 @@ contains
 
 
     ! RHO MKS
-    RHO_MKS  = sum(Z(:))
+    RHO_MKS  = sum(Z(1:nspec))
     RINV_MKS = 1.d0 / RHO_MKS
     ! MW CGS
     call CKWT(MWT);
@@ -180,6 +234,7 @@ contains
     do K=1,nspec
       CONC_CGS(K) = Z(K)/MWT(K)*1.d-3
       Y(K) = Z(K) * RINV_MKS
+      print *," Y, WT ", Z(K), 1./MWT(K)
     enddo
 
     HMIX_MKS = (Z(nspec+1) + 0.0d0*TIME) * RINV_MKS
@@ -191,6 +246,8 @@ contains
     THFAC = 1.d3
     do k= 1, Nspec
       ZP(k) = WDOT_CGS(k) * MWT(k) * THFAC + 0.0d0
+      print *," RHO, C(CGS), H, T",RHO_MKS, CONC_CGS(k), HMIX_MKS, TEMP
+      print *," wdot(CGS), wdot", WDOT_CGS(k), ZP(k)
     end do
       
   end subroutine pphys_calc_src_sdc
@@ -203,7 +260,6 @@ contains
 
     implicit none
 
-#include <cdwrk.H>
 #include <htdata.H>
 
     integer DensityIn, TempIn, TracIn, RhoHIn, FirstSpecIn, LastSpecIn
@@ -226,9 +282,10 @@ contains
 
   subroutine get_typical_vals(typ_vals,nVals)bind(C, name="get_typical_vals")
 
+    use network, only : nspec
+
     implicit none
 
-#include <cdwrk.H>
 #include <conp.H>
 #include <htdata.H>
 
@@ -264,9 +321,10 @@ contains
 
   subroutine set_typical_vals(typ_vals,nVals)bind(C, name="set_typical_vals")
 
+    use network, only : nspec
+
     implicit none
 
-#include <cdwrk.H>
 #include <conp.H>
 #include <htdata.H>
 
@@ -351,7 +409,6 @@ contains
 
     implicit none
 
-#include <cdwrk.H>
 #include <conp.H>
 
     typVal_Density = zero
@@ -437,7 +494,6 @@ contains
     implicit none
 
 #include <probdata.H>
-#include <cdwrk.H>
 #include <bc.H>
 
 !

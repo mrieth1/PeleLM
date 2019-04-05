@@ -7,7 +7,7 @@
       parameter (Nzones=5)      
 
       REAL_T u_bc(Nzones), v_bc(Nzones), w_bc(Nzones), rho_bc(Nzones)
-      REAL_T Y_bc(0:maxspec-1, Nzones), T_bc(Nzones)
+      REAL_T Y_bc(0:199, Nzones), T_bc(Nzones)
       REAL_T h_bc(Nzones)
 
       integer MAXPNTS

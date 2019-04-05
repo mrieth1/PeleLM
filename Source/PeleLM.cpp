@@ -21,7 +21,6 @@
 #include <PeleLM.H>
 #include <PeleLM_F.H>
 #include <Prob_F.H>
-#include <ChemDriver_F.H>
 #include <DIFFUSION_F.H>
 #include <AMReX_MultiGrid.H>
 #include <AMReX_ArrayLim.H>
@@ -162,13 +161,13 @@ int  PeleLM::reset_typical_vals_int=-1;
 std::map<std::string,Real> PeleLM::typical_values_FileVals;
 
 std::string                                PeleLM::turbFile;
-ChemDriver*                                PeleLM::chemSolve;
 std::map<std::string, Vector<std::string> > PeleLM::auxDiag_names;
 
 Vector<Real> PeleLM::typical_values;
 
 int PeleLM::sdc_iterMAX;
 int PeleLM::num_mac_sync_iter;
+int PeleLM::iter_debug;
 
 static
 std::string
@@ -295,9 +294,9 @@ PeleLM::init_reactor (int iE)
 }
 
 void
-PeleLM::init_transport ()
+PeleLM::init_transport (int iEG)
 {
-	pphys_transport_init(); 
+	pphys_transport_init(&iEG); 
 }
 
 bool
@@ -481,10 +480,10 @@ PeleLM::getCpmixGivenTY_pphys(FArrayBox&       cpmix,
     BL_ASSERT(T.box().contains(box));
     BL_ASSERT(Y.box().contains(box));
     
-    pphys_CPMIXfromTY(box.loVect(), box.hiVect(),
-		     cpmix.dataPtr(sCompCp),ARLIM(cpmix.loVect()), ARLIM(cpmix.hiVect()),
-		     T.dataPtr(sCompT),     ARLIM(T.loVect()),     ARLIM(T.hiVect()),
-		     Y.dataPtr(sCompY),     ARLIM(Y.loVect()),     ARLIM(Y.hiVect()));
+    pphys_CPMIXfromTY(ARLIM_3D(box.loVect()), ARLIM_3D(box.hiVect()),
+		     BL_TO_FORTRAN_N_3D(cpmix,sCompCp),
+		     BL_TO_FORTRAN_N_3D(T,sCompT),
+		     BL_TO_FORTRAN_N_3D(Y,sCompY));
 }
 
 static
@@ -603,7 +602,6 @@ PeleLM::Initialize ()
   PeleLM::htt_tempmax               = 40000.;
   PeleLM::htt_hmixTYP               = -1.;
   PeleLM::zeroBndryVisc             = 0;
-  PeleLM::chemSolve                 = 0;
   PeleLM::do_check_divudt           = 1;
   PeleLM::hack_nochem               = 0;
   PeleLM::hack_nospecdiff           = 0;
@@ -625,6 +623,7 @@ PeleLM::Initialize ()
 
   PeleLM::sdc_iterMAX               = 1;
   PeleLM::num_mac_sync_iter         = 1;
+  PeleLM::iter_debug                = 0;
 
   ParmParse pp("ns");
 
@@ -712,14 +711,11 @@ PeleLM::Initialize ()
 
   pp.query("use_tranlib",use_tranlib);
   if (use_tranlib == 1) {
-    chemSolve->SetTransport(ChemDriver::CD_TRANLIB);
     if (verbose) amrex::Print() << "PeleLM::read_params: Using Tranlib transport " << '\n';
   }
   else {
-    chemSolve->SetTransport(ChemDriver::CD_EG);
     if (verbose) amrex::Print() << "PeleLM::read_params: Using EGLib transport " << '\n';
   }
-  chemSolve = new ChemDriver();
 
   pp.query("turbFile",turbFile);
 
@@ -1034,8 +1030,6 @@ PeleLM::variableCleanUp ()
 {
   NavierStokesBase::variableCleanUp();
 
-  delete chemSolve;
-  chemSolve = 0;
 
   ShowMF_Sets.clear();
   auxDiag_names.clear();
@@ -1907,8 +1901,6 @@ PeleLM::initData ()
       DataServices::Dispatch(DataServices::ExitRequest, NULL);
 
     AmrData&                  amrData   = dataServices.AmrDataRef();
-    //const int                 nspecies  = getChemSolve().numSpecies();
-    //const Vector<std::string>& names     = getChemSolve().speciesNames();   
     Vector<std::string>        plotnames = amrData.PlotVarNames();
 
     if (amrData.FinestLevel() < level)
@@ -4943,17 +4935,17 @@ PeleLM::advance (Real time,
     MultiFab Dhat(grids,dmap,nspecies+2,nGrowAdvForcing);
 
     // advection-diffusion solve
-    showMF("sdc",Forcing,"sdc_Forcing_before_Dhat",level,sdc_iter,parent->levelSteps(level));
+    showMF("debugAnne",Forcing,"sdc_Forcing_before_Dhat",level,sdc_iter,parent->levelSteps(level));
     BL_PROFILE_VAR_START(HTDIFF);
     differential_diffusion_update(Forcing,0,Dhat,0,DDnp1);
     BL_PROFILE_VAR_STOP(HTDIFF);
 
-    showMF("sdc",Dn,"sdc_Dn_before_R",level,sdc_iter,parent->levelSteps(level));
-    showMF("sdc",Dnp1,"sdc_Dnp1_before_R",level,sdc_iter,parent->levelSteps(level));
-    showMF("sdc",DDn,"sdc_DDn_before_R",level,sdc_iter,parent->levelSteps(level));
-    showMF("sdc",DDnp1,"sdc_DDnp1_before_R",level,sdc_iter,parent->levelSteps(level));
-    showMF("sdc",Dhat,"sdc_Dhat_before_R",level,sdc_iter,parent->levelSteps(level));
-    showMF("sdc",*aofs,"sdc_A_before_R",level,sdc_iter,parent->levelSteps(level));
+    showMF("debugAnne",Dn,"sdc_Dn_before_R",level,sdc_iter,parent->levelSteps(level));
+    showMF("debugAnne",Dnp1,"sdc_Dnp1_before_R",level,sdc_iter,parent->levelSteps(level));
+    showMF("debugAnne",DDn,"sdc_DDn_before_R",level,sdc_iter,parent->levelSteps(level));
+    showMF("debugAnne",DDnp1,"sdc_DDnp1_before_R",level,sdc_iter,parent->levelSteps(level));
+    showMF("debugAnne",Dhat,"sdc_Dhat_before_R",level,sdc_iter,parent->levelSteps(level));
+    showMF("debugAnne",*aofs,"sdc_A_before_R",level,sdc_iter,parent->levelSteps(level));
 
     // 
     // Compute R (F = A + 0.5(Dn - Dnp1 + DDn + DDnp1) + Dhat )
@@ -4993,7 +4985,7 @@ PeleLM::advance (Real time,
     if (verbose) amrex::Print() << "R (SDC corrector " << sdc_iter << ")\n";
 
     showMF("sdc",S_old,"sdc_Sold_before_R",level,sdc_iter,parent->levelSteps(level));
-    showMF("sdc",Forcing,"sdc_Forcing_before_R",level,sdc_iter,parent->levelSteps(level));
+    showMF("debugAnne",Forcing,"sdc_Forcing_before_R",level,sdc_iter,parent->levelSteps(level));
     BL_PROFILE_VAR_START(HTREAC);
     advance_chemistry(S_old,S_new,dt,Forcing,0);
     BL_PROFILE_VAR_STOP(HTREAC);
@@ -5429,6 +5421,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 
     if (do_diag)
     {
+	amrex::Print() << "*** DO DIAG ??" << '\n';
         diagTemp.define(ba, dm, auxDiag["REACTIONS"]->nComp(), 0);
         diagTemp.copy(*auxDiag["REACTIONS"]); // Parallel copy
     }
@@ -7078,10 +7071,16 @@ PeleLM::calcDiffusivity (const Real time)
     int       dotemp  = 1;
     bcen.resize(gbox,nc_bcen);
         
-    spec_temp_visc(gbox.loVect(),gbox.hiVect(),
-                      ARLIM(Tfab.loVect()),ARLIM(Tfab.hiVect()),Tfab.dataPtr(),
-                      ARLIM(RYfab.loVect()),ARLIM(RYfab.hiVect()),RYfab.dataPtr(1),
-                      ARLIM(bcen.loVect()),ARLIM(bcen.hiVect()),bcen.dataPtr(),
+    //spec_temp_visc(gbox.loVect(),gbox.hiVect(),
+    //                  ARLIM(Tfab.loVect()),ARLIM(Tfab.hiVect()),Tfab.dataPtr(),
+    //                  ARLIM(RYfab.loVect()),ARLIM(RYfab.hiVect()),RYfab.dataPtr(1),
+    //                  ARLIM(bcen.loVect()),ARLIM(bcen.hiVect()),bcen.dataPtr(),
+    //                  &nc_bcen, &P1atm_MKS, &dotemp, &vflag, &p_amb);
+
+    spec_temp_visc(ARLIM_3D(gbox.loVect()), ARLIM_3D(gbox.hiVect()),
+                      BL_TO_FORTRAN_N_3D(Temp_mf[mfi],0),
+                      BL_TO_FORTRAN_N_3D(Rho_and_spec_mf[mfi],1),
+                      BL_TO_FORTRAN_N_3D(bcen,0),
                       &nc_bcen, &P1atm_MKS, &dotemp, &vflag, &p_amb);
         
     FArrayBox& Dfab = diff[mfi];
@@ -7121,6 +7120,8 @@ PeleLM::calcDiffusivity (const Real time)
   }
 }
   showMFsub("1D",diff,stripBox,"1D_calcD_visc",level);
+  //showMF("debugAnne",diff,"1D_calcD_visc",level);
+  //amrex::Abort("1D plot then stop");
 }
 
 #ifdef USE_WBAR
@@ -7327,15 +7328,21 @@ PeleLM::compute_vel_visc (Real      time,
     for (int n = 1; n < nspecies+1; ++n)
       rho_and_spec.mult(tmp,box,0,n,1);
 
-    vel_visc(box.loVect(),box.hiVect(),
-                 ARLIM(temp.loVect()),ARLIM(temp.hiVect()),temp.dataPtr(),
-                 ARLIM(rho_and_spec.loVect()),ARLIM(rho_and_spec.hiVect()),
-                 rho_and_spec.dataPtr(1),
-                 ARLIM(tmp.loVect()),ARLIM(tmp.hiVect()),tmp.dataPtr());
+    //vel_visc(box.loVect(),box.hiVect(),
+    //             ARLIM(temp.loVect()),ARLIM(temp.hiVect()),temp.dataPtr(),
+    //             ARLIM(rho_and_spec.loVect()),ARLIM(rho_and_spec.hiVect()),
+    //             rho_and_spec.dataPtr(1),
+    //             ARLIM(tmp.loVect()),ARLIM(tmp.hiVect()),tmp.dataPtr());
+    vel_visc(ARLIM_3D(box.loVect()), ARLIM_3D(box.hiVect()),
+		 BL_TO_FORTRAN_N_3D(temp,0),
+		 BL_TO_FORTRAN_N_3D(rho_and_spec,1),
+		 BL_TO_FORTRAN_N_3D(tmp,0));
 
     (*beta)[mfi].copy(tmp,box,0,box,0,1);
   }
 }
+  //iter_debug = iter_debug + 1;
+  //showMF("debugAnne",*beta,"vel_visc",level,iter_debug);
 }
 
 void
@@ -7350,6 +7357,7 @@ PeleLM::calc_divu (Real      time,
   MultiFab  mcViscTerms;
 
 #ifdef USE_WBAR
+  amrex::Print() << "using wbar ??"<< '\n';
   MultiFab DWbar_temp(grids,dmap,nspecies,nGrowAdvForcing);
 #endif
 
@@ -7394,6 +7402,8 @@ PeleLM::calc_divu (Real      time,
       // init_iter or regular time step, use instantaneous omegadot
       RhoYdot.define(grids,dmap,nspecies,0);
       compute_instantaneous_reaction_rates(RhoYdot,S,time,nGrow);
+      iter_debug = iter_debug + 1;
+      showMF("debugAnne",RhoYdot,"RhoYdot",level,iter_debug);
     }
     else
     {
@@ -7420,6 +7430,8 @@ PeleLM::calc_divu (Real      time,
                   rhoY.dataPtr(first_spec), ARLIM(rhoY.loVect()),  ARLIM(rhoY.hiVect()),
                   T.dataPtr(Temp),          ARLIM(T.loVect()),     ARLIM(T.hiVect()));
   }
+  //iter_debug = iter_debug + 1;
+  //showMF("debugAnne",divu,"divu",level,iter_debug);
 }
 
 //
@@ -7572,13 +7584,9 @@ int RhoH_to_Temp_DoIt(FArrayBox&       Tfab,
                       int              sCompY,
                       int              dCompT,
                       const Real&      htt_hmixTYP)
-                      //ChemDriver&      cd)
 {
-  //const Real eps = cd.getHtoTerrMAX();
-  //Real errMAX = eps*htt_hmixTYP;
 
   int iters = getTGivenHY_pphys(Tfab,Hfab,Yfab,box,sCompH,sCompY,dCompT);
-  //nt iters = 10;
 
   if (iters < 0)
     amrex::Error("PeleLM::RhoH_to_Temp(fab): error in H->T");
@@ -7614,7 +7622,7 @@ PeleLM::RhoH_to_Temp (FArrayBox& S,
   }    
 
   // we index into Temperature component in S.  H and Y begin with the 0th component
-  int iters = RhoH_to_Temp_DoIt(S,H,Y,box,0,0,Temp,htt_hmixTYP); //,getChemSolve());
+  int iters = RhoH_to_Temp_DoIt(S,H,Y,box,0,0,Temp,htt_hmixTYP);
 
   if (dominmax)
     FabMinMax(S, box, htt_tempmin, htt_tempmax, Temp, 1);    

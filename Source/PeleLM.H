@@ -4,7 +4,6 @@
 
 #include <AMReX_AuxBoundaryData.H>
 #include <NavierStokesBase.H>
-#include <ChemDriver.H>
 
 #include <list>
 #include <map>
@@ -123,7 +122,6 @@ public:
   //    PeleLM public static functions                                //
   ////////////////////////////////////////////////////////////////////////////
 
-  //static ChemDriver& getChemSolve () { return *chemSolve; }
   //
   // Define data descriptors.
   //
@@ -389,7 +387,7 @@ private:
 
   static void init_reactor (int iE);
 
-  static void init_transport ();
+  static void init_transport (int iEG);
 
   bool solveChemistry_sdc(amrex::FArrayBox&        rhoYnew,
                             amrex::FArrayBox&        rhoHnew,
@@ -463,6 +461,10 @@ private:
   //                   int              sCompY,
   //                   int              sCompT); // const;
   //                   //const amrex::Real&      errMAX = -1) const;
+
+  void HfromT_pphys(const int* lo, const int* hi,
+		     amrex::Real*       H, ARLIM_P(Hlo), ARLIM_P(Hhi),
+		     const amrex::Real* T, ARLIM_P(Tlo), ARLIM_P(Thi));
 
   static void RhoH_to_Temp (amrex::MultiFab& S,
                             int       nGrow = 0,
@@ -538,7 +540,6 @@ private:
   static int         nreactions;
   static amrex::Vector<std::string> spec_names;
   static int         floor_species;
-  static ChemDriver* chemSolve;
   static amrex::Real        rgas;
   static amrex::Real        prandtl;
   static amrex::Real        schmidt;
@@ -570,6 +571,7 @@ private:
   static std::map<std::string,amrex::Real> typical_values_FileVals;
   static int         sdc_iterMAX;
   static int         num_mac_sync_iter;
+  static int         iter_debug;
     
   static int nGrowAdvForcing;
 };
