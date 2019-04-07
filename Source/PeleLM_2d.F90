@@ -705,11 +705,12 @@ contains
       REAL_T diag(DIMV(FuncCount),*)
 
 
-      integer i, j
+      integer i, j, lierr
       REAL_T  TT1, TT2
       double precision  Z(nspec+1), Ysrc(nspec)
+      REAL_T  Yt(nspec)
       double precision energy, energy_src
-      REAL_T  rho, rhoInv
+      REAL_T  rho, rhoInv, HMIX_CGS
       double precision  pressure
 
       print *, "IN CONPsolv_SDC "
@@ -740,7 +741,12 @@ contains
             rho                  = sum(rhoYnew(i,j,1:Nspec))
             rhoHnew(i,j)         = energy * 1.D-1 
             Tnew(i,j)            = Z(Nspec+1)
-            !print *, "rho, T, rhoenergy, rhoenergy_src ", rho, Tnew(i,j), rhoHnew(i,j), const_src(i,j,Nspec+1)
+
+            ! Necessary ?
+            HMIX_CGS = rhoHnew(i,j) * 1.0d4 / rho
+            Yt(1:nspec) = rhoYnew(i,j,1:nspec) / rho
+            call get_t_given_hy(HMIX_CGS, Yt, Tnew(i,j), lierr);
+            print *, "rho, T, rhoenergy, rhoenergy_src ", rho, Tnew(i,j), rhoHnew(i,j), const_src(i,j,Nspec+1)
 
          end do
       end do
@@ -1106,7 +1112,8 @@ contains
 !-------------------------------------
       
   integer function pphys_TfromHY(lo, hi, T, DIMS(T), &
-                           HMIX, DIMS(HMIX), Y, DIMS(Y))&
+                           HMIX, DIMS(HMIX), Y, DIMS(Y), &
+                           errMax, NiterMAX, res) &
                            bind(C, name="pphys_TfromHY")
                            
       use network,        only : nspec
@@ -1114,17 +1121,21 @@ contains
       implicit none
 
       integer lo(SDIM), hi(SDIM)
+      integer NiterMAX
       integer DIMDEC(T)
       integer DIMDEC(HMIX)
       integer DIMDEC(Y)
       REAL_T T(DIMV(T))
       REAL_T HMIX(DIMV(HMIX))
       REAL_T Y(DIMV(Y),*)
+      REAL_T errMAX
+      REAL_T res(0:NiterMAX-1)
 
       REAL_T Yt(nspec)
-      integer i, j, n, lierr
-      REAL_T HMIX_CGS
+      integer i, j, n, lierr, Niter,MAXiters
+      REAL_T HMIX_CGS, Tguess
 
+      MAXiters = 0
       do j=lo(2),hi(2)
          do i=lo(1),hi(1)
 
@@ -1132,19 +1143,150 @@ contains
                Yt(n) = Y(i,j,n)
             end do
 
-            !call pphys_TfromHYpt(T(i,j),HMIX(i,j),Yt,errMax,NiterMAX,res,Niter)
-            HMIX_CGS = HMIX(i,j) * 1.0d4
-            call get_t_given_hy(HMIX_CGS, Yt, T(i,j), lierr);
+            !HMIX_CGS = HMIX(i,j) * 1.0d4
+            !call get_t_given_hy(HMIX_CGS, Yt, T(i,j), lierr);
+
+            call pphys_TfromHYpt(T(i,j),HMIX(i,j),Yt,errMax,NiterMAX,res,Niter)
+
+            if (Niter .lt. 0) then
+                    call bl_abort(" Something went wrong in pphys_TfromHYpt ")
+            end if
+
+            if (Niter .gt. MAXiters) then
+                    MAXiters = Niter
+            end if
             
          end do
       end do
 
 !     Set max iters taken during this solve, and exit
-      pphys_TfromHY = 10
+      pphys_TfromHY = MAXiters !10
       return
 
   end function pphys_TfromHY
 
+!-------------------------------------
+
+  subroutine pphys_TfromHYpt(T,Hin,Y,errMax,NiterMAX,res,Niter)&
+                  bind(C, name="pphys_TfromHYpt")
+
+      implicit none
+
+      REAL_T T,Y(*),Hin,errMax
+
+      integer NiterMAX,Niter,NiterDAMP,ihitlo,ihithi
+      REAL_T  T0,cp,dH
+      REAL_T  res(0:NiterMAX-1),dT, Htarg,HMIN,cpMIN,HMAX,cpMAX
+      logical converged, soln_bad, stalled
+      REAL_T  H, old_T, old_H, Tsec, Hsec
+
+      integer, parameter :: Discont_NiterMAX = 100
+      REAL_T,  parameter :: TMIN = 250.d0, TMAX = 5000.d0
+
+      if ((T.GE.TMIN).and.(T.LE.TMAX)) then
+            T0 = T
+      else
+            T0 = half*(TMIN+TMAX)
+            T  = T0
+      end if
+
+      NiterDAMP = NiterMAX
+      Niter     = 0
+      soln_bad  = .FALSE.
+      Htarg     = Hin * 1.d4
+      ihitlo    = 0
+      ihithi    = 0
+
+      CALL CKHBMS(T,Y,H)
+
+      old_T = T
+      old_H = H
+
+      dH         = two*ABS(H - Htarg)/(one + ABS(H) + ABS(Htarg))
+      res(Niter) = dH
+      converged  = dH.le.errMAX
+      stalled    = .false.
+
+      do while ((.not.converged) .and. (.not.stalled) .and. (.not.soln_bad))
+
+          CALL CKCPBS(T,Y,cp)
+          dT = (Htarg - H)/cp
+          old_T = T
+          if ((Niter.le.NiterDAMP).and.(T+dT.ge.TMAX)) then
+                  T = TMAX
+                  ihithi = 1
+          else if ((Niter.le.NiterDAMP).and.(T+dT.le.TMIN)) then
+                  T = TMIN
+                  ihitlo = 1
+          else
+                  T = T + dT
+          end if
+          soln_bad = (T.lt.TMIN-one) .or. (T.gt.TMAX)
+          if (soln_bad) then
+                  Niter = -1
+                  exit
+          else
+                  old_H = H
+                  CALL CKHBMS(T,Y,H)
+                  dH = two*ABS(H - Htarg)/(one + ABS(H) + ABS(Htarg))
+                  res(Niter) = min(dH,abs(dT))
+                  Niter = Niter + 1
+          end if
+          converged = (dH.le.errMAX) .or. (ABS(dT).le.errMAX)
+          if (Niter .ge. NiterMAX) then
+                  if(abs(T-1000.d0).le.1.d-3.and. dH.le.1.d-5)then
+                          converged = .true.
+                  else
+                          Niter = -2
+                          exit
+                  end if
+          end if
+
+          if ((ihitlo.eq.1).and.(H.gt.Htarg)) then
+                  T = TMIN
+                  CALL CKHBMS(T,Y,HMIN)
+                  CALL CKCPBS(T,Y,cpMIN)
+                  T=TMIN+(Htarg-HMIN)/cpMIN
+                  converged = .true.
+          end if
+          if ((ihithi.eq.1).and.(H.lt.Htarg)) then 
+                  T = TMAX
+                  CALL CKHBMS(T,Y,HMAX)
+                  CALL CKCPBS(T,Y,cpMAX)
+                  T=TMAX+(Htarg-HMAX)/cpMAX
+                  converged = .true.
+          end if
+
+          if (Niter .ge. NiterMAX) then
+              do while (.not. stalled)
+                  dT = - (H - Htarg) * (old_T - T)/(old_H - H)
+                  Tsec = T + dT
+                  soln_bad = (Tsec.lt.TMIN-one) .or. (Tsec.gt.TMAX)
+                  if (soln_bad) then
+                          Niter = -3
+                          exit
+                  end if
+                  CALL CKHBMS(Tsec,Y,Hsec)
+                  if ( (Hsec-Htarg)*(Htarg-H) .gt. 0.d0 ) then
+                          old_H = H
+                          old_T = T
+                  end if
+                  H = Hsec
+                  T = Tsec
+                  stalled = (2*ABS(old_T-T)/(old_T+T).le.errMAX)
+                  Niter = Niter + 1
+                  if (Niter.gt.NiterMAX+Discont_NiterMAX) then
+                          Niter = -2
+                          exit
+                  endif
+              end do
+              converged = .true.
+          end if
+      end do
+
+      if (converged) return
+
+  end subroutine pphys_TfromHYpt
 !-------------------------------------
 
   subroutine compute_rho_dgrad_hdot_grad_Y(dx, &
@@ -1419,7 +1561,7 @@ contains
         end if
       end if
     else
-      do n=1,nspec
+      do n=1,ncs
         do k=lo(3),hi(3) 
           do j=lo(2), hi(2)
             do i=lo(1), hi(1)

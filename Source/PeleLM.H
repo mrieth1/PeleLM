@@ -453,14 +453,14 @@ private:
                           int              sCompY,
                           int              sCompCp) const;
 
-  //int getTGivenHY_pphys (amrex::FArrayBox&       T,
-  //                   const amrex::FArrayBox& H,
-  //                   const amrex::FArrayBox& Y,
-  //                   const amrex::Box&       box,
-  //                   int              sCompH,
-  //                   int              sCompY,
-  //                   int              sCompT); // const;
-  //                   //const amrex::Real&      errMAX = -1) const;
+  static int getTGivenHY_pphys (amrex::FArrayBox&       T,
+                     const amrex::FArrayBox& H,
+                     const amrex::FArrayBox& Y,
+                     const amrex::Box&       box,
+                     int              sCompH,
+                     int              sCompY,
+                     int              sCompT,
+                     const amrex::Real&      errMAX = -1);
 
   void HfromT_pphys(const int* lo, const int* hi,
 		     amrex::Real*       H, ARLIM_P(Hlo), ARLIM_P(Hhi),
@@ -473,6 +473,15 @@ private:
   static int RhoH_to_Temp (amrex::FArrayBox& S,
                            const amrex::Box& box,
                            int        dominmax = false);
+
+  static int RhoH_to_Temp_DoIt(amrex::FArrayBox&       T,
+		  const amrex::FArrayBox& H,
+		  const amrex::FArrayBox& Y,
+		  const amrex::Box&       box,
+		  int              sCompH, 
+		  int              sCompY,
+		  int              sCompT,  
+		  const amrex::Real&      htt_hmixTYP );
 
 
   ////////////////////////////////////////////////////////////////////////////
@@ -572,6 +581,8 @@ private:
   static int         sdc_iterMAX;
   static int         num_mac_sync_iter;
   static int         iter_debug;
+  static int         mHtoTiterMAX;
+  static amrex::Vector<amrex::Real> mTmpData;
     
   static int nGrowAdvForcing;
 };

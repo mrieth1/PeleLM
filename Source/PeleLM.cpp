@@ -169,6 +169,9 @@ int PeleLM::sdc_iterMAX;
 int PeleLM::num_mac_sync_iter;
 int PeleLM::iter_debug;
 
+int PeleLM::mHtoTiterMAX;
+Vector<amrex::Real> PeleLM::mTmpData; 
+
 static
 std::string
 to_upper (const std::string& s)
@@ -486,30 +489,32 @@ PeleLM::getCpmixGivenTY_pphys(FArrayBox&       cpmix,
 		     BL_TO_FORTRAN_N_3D(Y,sCompY));
 }
 
-static
-int getTGivenHY_pphys(FArrayBox&       T,
+
+int 
+PeleLM::getTGivenHY_pphys(FArrayBox&       T,
                         const FArrayBox& H,
                         const FArrayBox& Y,
                         const Box&       box,
                         int              sCompH,
                         int              sCompY,
-                        int              sCompT) //const
-                        //const Real&      errMAX) const
+                        int              sCompT,
+	                const Real&      errMAX)
 {
     BL_ASSERT(T.nComp() > sCompT);
     BL_ASSERT(H.nComp() > sCompH);
-    BL_ASSERT(Y.nComp() >= sCompY+numSpecies());
+    BL_ASSERT(Y.nComp() >= sCompY+nspecies);
     
     BL_ASSERT(T.box().contains(box));
     BL_ASSERT(H.box().contains(box));
     BL_ASSERT(Y.box().contains(box));
 
-    //Real solveTOL = (errMAX<0 ? mHtoTerrMAX : errMAX);
+    Real solveTOL = (errMAX<0 ? 1.0e-8 : errMAX);
     
     return pphys_TfromHY(box.loVect(), box.hiVect(),
 			T.dataPtr(sCompT), ARLIM(T.loVect()), ARLIM(T.hiVect()),
 			H.dataPtr(sCompH), ARLIM(H.loVect()), ARLIM(H.hiVect()),
-			Y.dataPtr(sCompY), ARLIM(Y.loVect()), ARLIM(Y.hiVect()));
+			Y.dataPtr(sCompY), ARLIM(Y.loVect()), ARLIM(Y.hiVect()),
+			&solveTOL,&mHtoTiterMAX,mTmpData.dataPtr());
 }
 
 
@@ -624,6 +629,7 @@ PeleLM::Initialize ()
   PeleLM::sdc_iterMAX               = 1;
   PeleLM::num_mac_sync_iter         = 1;
   PeleLM::iter_debug                = 0;
+  PeleLM::mHtoTiterMAX              = 20;
 
   ParmParse pp("ns");
 
@@ -1132,6 +1138,8 @@ PeleLM::define_data ()
   const int nGrow       = 0;
   const int nEdgeStates = desc_lst[State_Type].nComp();
 
+  mTmpData.resize(mHtoTiterMAX);
+
   raii_fbs.push_back(std::unique_ptr<FluxBoxes>{new FluxBoxes(this, nEdgeStates, nGrow)});
   EdgeState = raii_fbs.back()->get();
 
@@ -1424,10 +1432,8 @@ PeleLM::set_typical_values(bool is_restart)
   {
     const int nComp = typical_values.size();
 
-    if (is_restart) {
-      //
-      // Typical values stored in the checkpoint file
-      //
+    if (is_restart) 
+    {
       BL_ASSERT(nComp==NUM_STATE);
 
       for (int i=0; i<nComp; ++i)
@@ -1452,7 +1458,8 @@ PeleLM::set_typical_values(bool is_restart)
 
       ParallelDescriptor::ReduceRealMax(typical_values.dataPtr(),nComp); //FIXME: better way?
     }
-    else  {
+    else  
+    {
       //
       // Check fortan common values, override values set above if fortran values > 0.
       //
@@ -7558,7 +7565,7 @@ PeleLM::RhoH_to_Temp (MultiFab& S,
     max_iters = std::max(max_iters, RhoH_to_Temp(S[mfi],box,dominmax));
   }
 
-  if (verbose > 1)
+  if (verbose)
   {
     const int IOProc   = ParallelDescriptor::IOProcessorNumber();
     Real      run_time = ParallelDescriptor::second() - strt_time;
@@ -7575,8 +7582,7 @@ PeleLM::RhoH_to_Temp (MultiFab& S,
 }
 
 
-static
-int RhoH_to_Temp_DoIt(FArrayBox&       Tfab,
+int PeleLM::RhoH_to_Temp_DoIt(FArrayBox&       Tfab,
                       const FArrayBox& Hfab,
                       const FArrayBox& Yfab,
                       const Box&       box,
@@ -7585,8 +7591,11 @@ int RhoH_to_Temp_DoIt(FArrayBox&       Tfab,
                       int              dCompT,
                       const Real&      htt_hmixTYP)
 {
+	// 1
+  const Real eps = 1.0e-8; //getHtoTerrMAX_pphys();
+  Real errMAX = eps*htt_hmixTYP;
 
-  int iters = getTGivenHY_pphys(Tfab,Hfab,Yfab,box,sCompH,sCompY,dCompT);
+  int iters = getTGivenHY_pphys(Tfab,Hfab,Yfab,box,sCompH,sCompY,dCompT, errMAX);
 
   if (iters < 0)
     amrex::Error("PeleLM::RhoH_to_Temp(fab): error in H->T");

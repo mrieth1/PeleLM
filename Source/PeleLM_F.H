@@ -56,7 +56,8 @@ extern "C" {
   int pphys_TfromHY(const int* lo, const int* hi,
 		     amrex::Real* T,       ARLIM_P(Tlo), ARLIM_P(Thi),
 		     const amrex::Real* h, ARLIM_P(hlo), ARLIM_P(hhi),
-		     const amrex::Real* Y, ARLIM_P(Ylo), ARLIM_P(Yhi));
+		     const amrex::Real* Y, ARLIM_P(Ylo), ARLIM_P(Yhi),
+		     const amrex::Real* errMAX, const int* NiterMAX,const amrex::Real* tmp);
 
   //void pphys_TfromHYpt(amrex::Real* T, const amrex::Real* Hin, const amrex::Real* Yin,
   //                      const amrex::Real* errMAX, const int* NiterMAX, const amrex::Real* res,
