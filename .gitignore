@@ -26,6 +26,12 @@ Backtrace*
 grdlog
 chk*
 diff/
+divu_*
+vel_visc_*
+RhoYdot_*
+out
+grdlog
+*_bu
 
 # OSX files
 .DS_Store
