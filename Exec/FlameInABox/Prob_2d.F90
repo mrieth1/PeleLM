@@ -691,8 +691,10 @@ contains
       do n = 1,Nspec
         Xt(n) = 0.d0
       end do 
+
       Xt(bathID) = fuel_N2_vol_percent*1.d-2
       Xt(fuelID) = 1.d0 - Xt(bathID)            
+
       CALL CKXTY (Xt, Yt)
 
       do n=1,Nspec
@@ -1077,7 +1079,7 @@ contains
                Xl(iH2O) = 0.0784d0
                Xl(iCH3OCH3) = 0.0374d0
                
-               CALL CKXTY (Xl, Yl)
+               CALL CKXTY (Xl,Yl)
                
 
          do j = lo(2), hi(2)

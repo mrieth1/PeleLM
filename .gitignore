@@ -25,6 +25,7 @@ plt*
 Backtrace*
 grdlog
 chk*
+diff/
 
 # OSX files
 .DS_Store
