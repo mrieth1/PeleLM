@@ -76,7 +76,7 @@ contains
        invmtw(n) = one / invmtw(n)
     end do
 
-    print *, "IN calc_divu_f ..."
+    !print *, "IN calc_divu_f ..."
     do j=lo(2),hi(2)
       do i=lo(1),hi(1)
         rhoInv = 0.d0
@@ -713,7 +713,7 @@ contains
       REAL_T  rho, rhoInv, HMIX_CGS
       double precision  pressure
 
-      print *, "IN CONPsolv_SDC "
+      !print *, "IN CONPsolv_SDC "
       call flush
       do j=lo(2),hi(2)
          do i=lo(1),hi(1)
@@ -746,7 +746,7 @@ contains
             HMIX_CGS = rhoHnew(i,j) * 1.0d4 / rho
             Yt(1:nspec) = rhoYnew(i,j,1:nspec) / rho
             call get_t_given_hy(HMIX_CGS, Yt, Tnew(i,j), lierr);
-            print *, "rho, T, rhoenergy, rhoenergy_src ", rho, Tnew(i,j), rhoHnew(i,j), const_src(i,j,Nspec+1)
+            !print *, "rho, T, rhoenergy, rhoenergy_src ", rho, Tnew(i,j), rhoHnew(i,j), const_src(i,j,Nspec+1)
 
          end do
       end do
@@ -783,10 +783,10 @@ contains
 
       TIME = 0.
 
-      print *, "IN RRATERHOY ..."
+      !print *, "IN RRATERHOY ..."
       do j=lo(2),hi(2)
          do i=lo(1),hi(1)
-            print *, "IJK ? ", i,j
+            !print *, "IJK ? ", i,j
 
             Zt(Nspec+1) = RhoH(i,j)
             do n=1,Nspec

@@ -435,7 +435,11 @@ PeleLM::variableSetUp ()
 
   Initialize();
 
+  // Initialize the runtime parameters for any of the external code
+  init_extern();
+
   /* PelePhysics */
+  amrex::Print() << " Initialization of network, reactor and transport \n";
   init_network();
   init_reactor(2);
   init_transport(use_tranlib);

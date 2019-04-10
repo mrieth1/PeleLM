@@ -172,6 +172,8 @@ int PeleLM::iter_debug;
 int PeleLM::mHtoTiterMAX;
 Vector<amrex::Real> PeleLM::mTmpData; 
 
+std::string  PeleLM::probin_file = "probin";
+
 static
 std::string
 to_upper (const std::string& s)
@@ -301,6 +303,26 @@ PeleLM::init_transport (int iEG)
 {
 	pphys_transport_init(&iEG); 
 }
+
+void
+PeleLM::init_extern ()
+{
+  // initialize the external runtime parameters -- these will
+  // live in the probin
+
+  amrex::Print() << "reading extern runtime parameters ... \n" << std::endl;
+
+  int probin_file_length = probin_file.length();
+  Vector<int> probin_file_name(probin_file_length);
+
+  for (int i = 0; i < probin_file_length; i++)
+  {
+    probin_file_name[i] = probin_file[i];
+  }
+
+  plm_extern_init(probin_file_name.dataPtr(),&probin_file_length);
+}
+
 
 bool
 PeleLM::solveChemistry_sdc(FArrayBox&        rhoYnew,
@@ -743,6 +765,10 @@ PeleLM::Initialize ()
 
   for (int i = 0; i < visc_coef.size(); i++)
     visc_coef[i] = bogus_value;
+
+  // Get some useful amr inputs
+  ParmParse ppa("amr");
+  ppa.query("probin_file",probin_file);
 
   // Useful for debugging
   ParmParse pproot;

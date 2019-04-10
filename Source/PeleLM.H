@@ -383,6 +383,8 @@ private:
 
   static void init_once ();
 
+  static void init_extern ();
+
   static void init_network ();
 
   static void init_reactor (int iE);
@@ -585,6 +587,8 @@ private:
   static amrex::Vector<amrex::Real> mTmpData;
     
   static int nGrowAdvForcing;
+
+  static std::string probin_file;
 };
 
 #endif /*_PeleLM_H_*/

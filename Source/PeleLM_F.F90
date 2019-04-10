@@ -86,6 +86,19 @@ contains
 
   end subroutine pphys_reactor_close
 
+subroutine plm_extern_init(name,namlen) bind(C, name="plm_extern_init")
+
+  ! initialize the external runtime parameters in
+  ! extern_probin_module
+  !use extern_probin_module, only: runtime_init 
+
+  integer :: namlen
+  integer :: name(namlen)
+
+  call runtime_init(name,namlen)
+
+end subroutine plm_extern_init
+
   subroutine pphys_get_num_spec(nspec_out) bind(C, name="pphys_get_num_spec")
 
       use network, only : nspec
@@ -234,7 +247,7 @@ contains
     do K=1,nspec
       CONC_CGS(K) = Z(K)/MWT(K)*1.d-3
       Y(K) = Z(K) * RINV_MKS
-      print *," Y, WT ", Z(K), 1./MWT(K)
+      !print *," Y, WT ", Z(K), 1./MWT(K)
     enddo
 
     HMIX_MKS = (Z(nspec+1) + 0.0d0*TIME) * RINV_MKS
@@ -246,8 +259,8 @@ contains
     THFAC = 1.d3
     do k= 1, Nspec
       ZP(k) = WDOT_CGS(k) * MWT(k) * THFAC + 0.0d0
-      print *," RHO, C(CGS), H, T",RHO_MKS, CONC_CGS(k), HMIX_MKS, TEMP
-      print *," wdot(CGS), wdot", WDOT_CGS(k), ZP(k)
+      !print *," RHO, C(CGS), H, T",RHO_MKS, CONC_CGS(k), HMIX_MKS, TEMP
+      !print *," wdot(CGS), wdot", WDOT_CGS(k), ZP(k)
     end do
       
   end subroutine pphys_calc_src_sdc
