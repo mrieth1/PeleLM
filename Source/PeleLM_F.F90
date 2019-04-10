@@ -67,17 +67,6 @@ contains
 
   end subroutine pphys_transport_close
 
-  subroutine pphys_reactor_init(iE) bind(C, name="pphys_reactor_init")
-
-      use reactor_module, only: reactor_init
-
-      implicit none
-      integer(c_int),  intent(in   ) :: iE
-
-      call reactor_init(iE)
-
-  end subroutine pphys_reactor_init
-
   subroutine pphys_reactor_close() bind(C, name="pphys_reactor_close")
 
       use reactor_module, only: reactor_close

@@ -441,7 +441,7 @@ PeleLM::variableSetUp ()
   /* PelePhysics */
   amrex::Print() << " Initialization of network, reactor and transport \n";
   init_network();
-  init_reactor(2);
+  reactor_init(&cvode_iE);
   init_transport(use_tranlib);
 
   BCRec bc;

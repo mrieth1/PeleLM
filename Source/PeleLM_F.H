@@ -67,7 +67,7 @@ extern "C" {
 
   void pphys_network_close();
 
-  void pphys_reactor_init(int* iE);
+  int reactor_init(const int* cvode_iE);
 
   void pphys_reactor_close();
 

@@ -387,8 +387,6 @@ private:
 
   static void init_network ();
 
-  static void init_reactor (int iE);
-
   static void init_transport (int iEG);
 
   bool solveChemistry_sdc(amrex::FArrayBox&        rhoYnew,
@@ -585,6 +583,11 @@ private:
   static int         iter_debug;
   static int         mHtoTiterMAX;
   static amrex::Vector<amrex::Real> mTmpData;
+
+  static int  cvode_iJac;
+  static int  cvode_iE;
+  static int  cvode_iDense;
+  static int  ncells_packing;
     
   static int nGrowAdvForcing;
 

@@ -153,6 +153,10 @@ Real PeleLM::P1atm_MKS;
 bool PeleLM::plot_reactions;
 bool PeleLM::plot_consumption;
 bool PeleLM::plot_heat_release;
+int  PeleLM::cvode_iJac;
+int  PeleLM::cvode_iE;
+int  PeleLM::cvode_iDense;
+int  PeleLM::ncells_packing;
 static bool plot_rhoydot;
 Real PeleLM::new_T_threshold;
 int  PeleLM::nGrowAdvForcing=1;
@@ -290,12 +294,6 @@ void
 PeleLM::init_network ()
 {
 	pphys_network_init(); 
-}
-
-void
-PeleLM::init_reactor (int iE)
-{
-	pphys_reactor_init(&iE); 
 }
 
 void
@@ -652,8 +650,17 @@ PeleLM::Initialize ()
   PeleLM::num_mac_sync_iter         = 1;
   PeleLM::iter_debug                = 0;
   PeleLM::mHtoTiterMAX              = 20;
+  PeleLM::cvode_iJac                = 0;
+  PeleLM::cvode_iE                  = 2;
+  PeleLM::cvode_iDense              = 1;
+  PeleLM::ncells_packing            = 1;
 
   ParmParse pp("ns");
+
+  pp.query("cvode_iJac",cvode_iJac);
+  pp.query("cvode_iE",cvode_iE);
+  pp.query("cvode_iDense",cvode_iDense);
+  pp.query("ncells_packing",ncells_packing);
 
   pp.query("do_diffuse_sync",do_diffuse_sync);
   BL_ASSERT(do_diffuse_sync == 0 || do_diffuse_sync == 1);
