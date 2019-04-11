@@ -47,12 +47,16 @@
 
 // Solve PNP function: return updated PhiV and nE
 	void ef_solve_PNP(amrex::Real      dt,
+							amrex::Real    time, 
 						   amrex::MultiFab& Dn,
 						   amrex::MultiFab& Dnp1,
 						   amrex::MultiFab& Dhat);
 
 // PNP NL residual function
-	void ef_NL_residual(amrex::Real      dt);
+	void ef_NL_residual(amrex::MultiFab&   ne_old,
+							  amrex::MultiFab** ke_ec,
+							  amrex::MultiFab** De_ec,
+							  amrex::Real        dt);
 
 // PNP provisional charge distribution
 	void ef_bg_chrg(amrex::Real      dt,
@@ -67,4 +71,19 @@
 	void ef_get_edge_transport(amrex::MultiFab** ke_ec,
 										amrex::MultiFab** De_ec);
 
+// Compute the electron diffusion term
+   void compute_ne_diffusion_term(amrex::Real      dt,
+											 amrex::MultiFab** De_ec,
+											 amrex::MultiFab& diff_ne_term);
+
+// Compute the electron convection term
+   void compute_ne_convection_term(amrex::MultiFab& conv_ne_term);
+
+// Compute the phiV Laplacian term
+   void compute_phiV_laplacian_term(amrex::Real      dt,
+												amrex::MultiFab& phiV_laplacian_term);
+
+// Setup ne BC for diffusion operator
+   void ef_set_neBC(std::array<amrex::LinOpBCType,AMREX_SPACEDIM>& diff_lobc,
+                    std::array<amrex::LinOpBCType,AMREX_SPACEDIM>& diff_hibc);
 #endif /*_Efield_H_*/

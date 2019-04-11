@@ -1,45 +1,3 @@
-#include <unistd.h>
-
-#include <iostream>
-#include <iomanip>
-#include <algorithm>
-#include <cfloat>
-#include <fstream>
-#include <vector>
-
-#include <AMReX_Geometry.H>
-#include <AMReX_Extrapolater.H>
-#include <AMReX_BoxDomain.H>
-#include <AMReX_ParmParse.H>
-#include <AMReX_ErrorList.H>
-#include <PeleLM.H>
-#include <PeleLM_F.H>
-#include <Prob_F.H>
-#include <ChemDriver_F.H>
-#include <DIFFUSION_F.H>
-#include <AMReX_MLPoisson.H>
-#include <AMReX_MLMG.H>
-#include <AMReX_MLABecLaplacian.H>
-#include <AMReX_MultiGrid.H>
-#include <AMReX_ArrayLim.H>
-#include <AMReX_SPACE.H>
-#include <AMReX_Interpolater.H>
-#include <AMReX_ccse-mpi.H>
-#include <AMReX_Utility.H>
-
-#if defined(BL_USE_NEWMECH) || defined(BL_USE_VELOCITY)
-#include <AMReX_DataServices.H>
-#include <AMReX_AmrData.H>
-#endif
-
-#include <PROB_F.H>
-#include <NAVIERSTOKES_F.H>
-#include <DERIVE_F.H>
-
-#include <AMReX_buildInfo.H>
-
-using namespace amrex;
-
 void PeleLM::ef_advance_setup(Real time) {
 
    ef_solve_phiv(time); 
@@ -107,6 +65,8 @@ void PeleLM::ef_calc_transport(Real time) {
                          Kpefab.dataPtr(),   ARLIM(Kpefab.loVect()),   ARLIM(Kpefab.hiVect()),
 							    Diffefab.dataPtr(), ARLIM(Diffefab.loVect()), ARLIM(Diffefab.hiVect()));
   }
+	showMF("pnp",diffElec_cc,"pnp_De_cc",level);
+	showMF("pnp",kappaElec_cc,"pnp_Ke_cc",level);
 }
 
 void PeleLM::ef_define_data() {
@@ -189,7 +149,7 @@ void PeleLM::ef_init() {
    PeleLM::PhiV                      = -1;
    PeleLM::have_nE                   = 0;
    PeleLM::have_PhiV                 = 0;
-   PeleLM::ef_phiV_tol               = 1.0e-12;
+   PeleLM::ef_phiV_tol               = 2.0e-8;
    PeleLM::ef_PoissonMaxIter			 = 1000;
    PeleLM::ef_PoissonVerbose			 = 1;
    PeleLM::ef_PoissonMaxOrder			 = 4;
@@ -261,11 +221,18 @@ void PeleLM::ef_set_PoissonBC(std::array<LinOpBCType,AMREX_SPACEDIM>& mlmg_lobc,
 }
 
 void PeleLM::ef_solve_PNP(Real dt, 
+							     Real time, 
 							     MultiFab& Dn,
 								  MultiFab& Dnp1,
 								  MultiFab& Dhat) {
 
 	BL_PROFILE("EF::ef_solve_PNP()");
+
+// Update ne BC before going further	
+//	MultiFab&  S = get_new_data(State_Type);
+//	FillPatchIterator nefpi(*this,S,1,time,State_Type,nE,1);
+//	MultiFab& nemf = nefpi.get_mf();
+//	MultiFab::Copy(S,nemf,0,nE,1,1);
 
 // Get edge-averaged transport properties	
    FluxBoxes diff_e(this, 1, 0);
@@ -292,7 +259,7 @@ void PeleLM::ef_solve_PNP(Real dt,
 // Pre-Newton stuff	
 // Get a MF for just nE and PhiV ?
 // Get the initial residuals
-   ef_NL_residual(dt);
+   ef_NL_residual( nE_old_alias, kappaElec_ec, diffElec_ec, dt );
 // Get the residual scaling
 // Check for direct convergence
 // Get data for globalization algo: in 1D I call Jac ... not great ...
@@ -319,35 +286,58 @@ void PeleLM::test_exit_newton(const int NK_ite, bool& exit_newton) {
 
 }
 
-void PeleLM::ef_NL_residual(Real dt) {
+void PeleLM::ef_NL_residual(MultiFab&   ne_old,
+								    MultiFab*   Ke_ec[BL_SPACEDIM],
+	  								 MultiFab*   De_ec[BL_SPACEDIM],
+								    Real        dt) {
 
-// Use amrex operators to get the RHS
+   MultiFab& I_R = get_new_data(RhoYdot_Type);
+	MultiFab I_R_e(I_R,amrex::make_alias,20,1); // TODO : define iE_sp in C++
  
+// Use amrex operators to get the RHS
 // Diffusion of ne
+	MultiFab diff_ne_term(grids, dmap, 1, 0);
+   compute_ne_diffusion_term(dt, De_ec, diff_ne_term);
 
 // Convection of ne
-  
+	MultiFab conv_ne_term(grids, dmap, 1, 0);
+   compute_ne_convection_term(conv_ne_term);
+ 
 // Laplacian of PhiV
+	MultiFab laplacian_term(grids, dmap, 1, 0);
+   compute_phiV_laplacian_term(dt, laplacian_term);
 
-//#ifdef _OPENMP
-//#pragma omp parallel
-//#endif
-//   for (MFIter mfi(pnp_X,true); mfi.isValid(); ++mfi)
-//   {
-//      const Box& box = mfi.tilebox();
-//      const FArrayBox& Xfab = pnp_X[mfi];
-//      const FArrayBox& Kpefab = kappaElec_cc[mfi];
-//      const FArrayBox& Defab = diffElec_cc[mfi];
-//      const FArrayBox& bgchrgfab = pnp_bgchrg[mfi];
-//      FArrayBox& Resfab = pnp_res[mfi];
-//      ef_calc_NL_residual(box.loVect(), box.hiVect(),
-//                          Xfab.dataPtr(0),      ARLIM(Xfab.loVect()),       ARLIM(Xfab.hiVect()),
-//                          Kpefab.dataPtr(),     ARLIM(Kpefab.loVect()),     ARLIM(Kpefab.hiVect()),
-//                          Defab.dataPtr(),      ARLIM(Defab.loVect()),      ARLIM(Defab.hiVect()),
-//                          bgchrgfab.dataPtr(),  ARLIM(bgchrgfab.loVect()),  ARLIM(bgchrgfab.hiVect()),
-//				              Resfab.dataPtr(0),    ARLIM(Resfab.loVect()),     ARLIM(Resfab.hiVect()),
-//								  dt);
-//   }
+// Build the non-linear residual	
+// res(ne(:)) = dt * ( diff(:) + conv(:) + I_R(:) ) - ( ne(:) - ne_old(:) )
+#ifdef _OPENMP
+#pragma omp parallel
+#endif
+   for (MFIter mfi(pnp_res,true); mfi.isValid(); ++mfi)
+   {
+      const Box& box = mfi.tilebox();
+      const FArrayBox& Xfab = pnp_X[mfi];
+      const FArrayBox& difffab = diff_ne_term[mfi];
+      const FArrayBox& convfab = conv_ne_term[mfi];
+      const FArrayBox& laplfab = laplacian_term[mfi];
+      const FArrayBox& IRefab = I_R_e[mfi];
+      const FArrayBox& neoldfab = ne_old[mfi];
+      const FArrayBox& bgchargfab = pnp_bgchrg[mfi];
+      FArrayBox& Resfab = pnp_res[mfi];
+	   Resfab.copy(difffab,box,0,box,0,1);		// Copy diff term into res for ne
+//	   Resfab.plus(convfab,box,box,0,0,1);		// Add diff term into res for ne
+//	   Resfab.plus(IRefab,box,box,0,0,1);	   // Add forcing term (I_R) into res for ne
+//		Resfab.mult(dt,box,0,1);					// times dt
+//		Resfab.minus(Xfab,box,box,0,0,1);		// Substract current ne
+//		Resfab.plus(neoldfab,box,box,0,0,1);	// Add old ne --> Done with ne residuals
+	   Resfab.copy(laplfab,box,0,box,1,1);	// Copy bg charge term into res for phiV
+//	   Resfab.copy(bgchargfab,box,0,box,1,1);	// Copy bg charge term into res for phiV
+//		Resfab.divide(CperECharge,box,1,1);		// Divide by unit charge
+//		Resfab.minus(Xfab,box,box,0,1,1);	   // Substract current ne
+//		Resfab.plus(laplfab,box,box,0,1,1);	   // Add the phiV laplacian --> Done with phiV residuals
+   }
+
+	showMF("pnp",pnp_res,"pnp_res",level);
+
 }
 
 void PeleLM::ef_bg_chrg(Real dt,
@@ -397,5 +387,168 @@ void PeleLM::ef_get_edge_transport(MultiFab* Ke_ec[BL_SPACEDIM],
 		                         0, 1, geom.Domain(), bc_lo, bc_hi);
       }
    }
-//	showMF("sdc",,"sdc_new_state",level);
+}
+
+void PeleLM::compute_ne_diffusion_term(Real dt,
+													MultiFab* De_ec[BL_SPACEDIM],
+													MultiFab& diff_ne) {
+
+// Get alias to ne in pnp_X
+//	MultiFab nE_alias(pnp_X,amrex::make_alias,0,1);
+	const Real time  = state[State_Type].curTime();	// current time
+	MultiFab&  S = get_new_data(State_Type);
+	FillPatchIterator nEfpi(*this,S,1,time,State_Type,nE,1);
+	MultiFab& nEmf = nEfpi.get_mf();
+	MultiFab::Copy(S,nEmf,0,nE,1,1);
+   MultiFab nE_alias(S,amrex::make_alias,nE,1);
+
+// Set-up Lapl operator
+   LPInfo info;
+   info.setAgglomeration(1);
+   info.setConsolidation(1);
+   info.setMetricTerm(false);
+
+   MLABecLaplacian ne_LAPL({geom}, {grids}, {dmap}, info);
+   ne_LAPL.setMaxOrder(ef_PoissonMaxOrder);
+	  
+// BC's	
+   std::array<LinOpBCType,AMREX_SPACEDIM> mlmg_lobc;
+   std::array<LinOpBCType,AMREX_SPACEDIM> mlmg_hibc;
+	ef_set_neBC(mlmg_lobc, mlmg_hibc);
+	ne_LAPL.setDomainBC(mlmg_lobc, mlmg_hibc);
+	ne_LAPL.setLevelBC(0, &nE_alias);
+
+// Coeff's	
+   ne_LAPL.setScalars(0.0, 1.0); 
+	MultiFab acoef(grids, dmap, 1, 0);
+	acoef.setVal(0.0);	
+	ne_LAPL.setACoeffs(0, acoef);
+	std::array<const MultiFab*,AMREX_SPACEDIM> bcoeffs{D_DECL(De_ec[0],De_ec[1],De_ec[2])};
+	ne_LAPL.setBCoeffs(0, bcoeffs);
+
+	const Real cur_time  = state[State_Type].curTime();	// current time
+	FluxBoxes fluxb  (this, 1, 0);								// Flux box ...
+	MultiFab **flux    =   fluxb.get();							// ... associated flux MultiFab
+	MLMG mlmg(ne_LAPL);
+	std::array<MultiFab*,AMREX_SPACEDIM> fp{D_DECL(flux[0],flux[1],flux[2])};
+	mlmg.getFluxes({fp},{&nE_alias});
+
+// Rescale fluxes to get right stuff regardless of cartesian or r-Z
+   for (int d = 0; d < BL_SPACEDIM; ++d) 
+      flux[d]->mult(1.0/(dt*geom.CellSize()[d]));   
+
+// Get flux divergence, scaled by -1
+	flux_divergence(diff_ne,0,flux,0,1,-1);
+
+}
+
+void PeleLM::compute_ne_convection_term(MultiFab& conv_ne) {
+
+	conv_ne.setVal(0.0);
+
+}
+
+void PeleLM::compute_phiV_laplacian_term(Real dt,
+													  MultiFab& lapl_phiV) {
+
+
+// TODO: most of these operator should be done once at the beginning of the PNP solve	
+// Get alias to ne in pnp_X
+//	MultiFab phiV_alias(pnp_X,amrex::make_alias,1,1);
+	const Real time  = state[State_Type].curTime();	// current time
+	MultiFab&  S = get_new_data(State_Type);
+	FillPatchIterator PhiVfpi(*this,S,1,time,State_Type,PhiV,1);
+	MultiFab& PhiVmf = PhiVfpi.get_mf();
+	MultiFab::Copy(S,PhiVmf,0,PhiV,1,1);
+   MultiFab PhiV_alias(S,amrex::make_alias,PhiV,1);
+
+// Get a bunch of stuff necesary to get the fluxes
+	FluxBoxes fluxb  (this, 1, 0);								// Flux box ...
+	MultiFab **flux     = fluxb.get();							// ... associated flux MultiFab
+
+// Set-up Poisson operator
+   LPInfo info;
+   info.setAgglomeration(1);
+   info.setConsolidation(1);
+   info.setMetricTerm(false);
+
+   MLPoisson phiV_poisson({geom}, {grids}, {dmap}, info);
+   phiV_poisson.setMaxOrder(ef_PoissonMaxOrder);
+
+// BC's	
+   std::array<LinOpBCType,AMREX_SPACEDIM> mlmg_lobc;
+   std::array<LinOpBCType,AMREX_SPACEDIM> mlmg_hibc;
+	ef_set_PoissonBC(mlmg_lobc, mlmg_hibc);
+   phiV_poisson.setDomainBC(mlmg_lobc, mlmg_hibc);
+   phiV_poisson.setLevelBC(0, &PhiV_alias);
+
+// LinearSolver to get fluxes
+	MLMG mlmg(phiV_poisson);
+	std::array<MultiFab*,AMREX_SPACEDIM> fp{D_DECL(flux[0],flux[1],flux[2])};
+	mlmg.getFluxes({fp},{&PhiV_alias});
+
+// Rescale fluxes to get right stuff regardless of cartesian or r-Z
+   for (int d = 0; d < BL_SPACEDIM; ++d) 
+       flux[d]->mult(1.0/(dt*geom.CellSize()[d]));   
+
+// Get flux divergence, scaled by -1
+	flux_divergence(lapl_phiV,0,flux,0,1,-1);
+
+}
+
+// Setup BC conditions for diffusion operator on nE. Directly copied from the diffusion one ...
+void PeleLM::ef_set_neBC(std::array<LinOpBCType,AMREX_SPACEDIM>& diff_lobc,
+                              std::array<LinOpBCType,AMREX_SPACEDIM>& diff_hibc) {
+
+    const BCRec& bc = get_desc_lst()[State_Type].getBC(nE);
+
+    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
+    {
+        if (Geometry::isPeriodic(idim))
+        {
+            diff_lobc[idim] = diff_hibc[idim] = LinOpBCType::Periodic;
+        }
+        else
+        {
+            int pbc = bc.lo(idim);
+            if (pbc == EXT_DIR)
+            {
+                diff_lobc[idim] = LinOpBCType::Dirichlet;
+            }
+            else if (pbc == FOEXTRAP      ||
+                     pbc == HOEXTRAP      || 
+                     pbc == REFLECT_EVEN)
+            {
+                diff_lobc[idim] = LinOpBCType::Neumann;
+            }
+            else if (pbc == REFLECT_ODD)
+            {
+                diff_lobc[idim] = LinOpBCType::reflect_odd;
+            }
+            else
+            {
+                diff_lobc[idim] = LinOpBCType::bogus;
+            }
+
+            pbc = bc.hi(idim);
+            if (pbc == EXT_DIR)
+            {
+                diff_hibc[idim] = LinOpBCType::Dirichlet;
+            }
+            else if (pbc == FOEXTRAP      ||
+                     pbc == HOEXTRAP      || 
+                     pbc == REFLECT_EVEN)
+            {
+                diff_hibc[idim] = LinOpBCType::Neumann;
+				} 
+            else if (pbc == REFLECT_ODD)
+            {
+                diff_hibc[idim] = LinOpBCType::reflect_odd;
+            }
+            else
+            {
+                diff_hibc[idim] = LinOpBCType::bogus;
+            }
+        }
+    }
 }
