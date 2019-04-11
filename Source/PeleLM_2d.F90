@@ -2396,7 +2396,7 @@ contains
 
     do j = lo(2), hi(2)
       do i = lo(1), hi(1)
-        diff_e(i,j) = kp_e(i,j) * RUNIV() * T(i,j) * oneoverdenom
+        diff_e(i,j) = kp_e(i,j) * RUNIV() * 0.001d0 * T(i,j) * oneoverdenom
       end do
     end do
 
