@@ -24,6 +24,9 @@
 #include <ChemDriver_F.H>
 #include <DIFFUSION_F.H>
 #include <AMReX_MultiGrid.H>
+#include <AMReX_MLPoisson.H>
+#include <AMReX_MLMG.H>
+#include <AMReX_MLABecLaplacian.H>
 #include <AMReX_ArrayLim.H>
 #include <AMReX_SPACE.H>
 #include <AMReX_Interpolater.H>
@@ -4724,7 +4727,7 @@ PeleLM::advance (Real time,
     showMF("sdc",*aofs,"sdc_A_before_R",level,sdc_iter,parent->levelSteps(level));
 
 #ifdef USE_EFIELD
-	 ef_solve_PNP(dt, Dn, Dnp1, Dhat);
+	 ef_solve_PNP(dt, time, Dn, Dnp1, Dhat);
 #endif	 
 
     // 
@@ -7968,3 +7971,6 @@ PeleLM::derive (const std::string& name,
   }
 }
 
+#ifdef USE_EFIELD
+#include <PeleLM_efield.cpp>
+#endif
