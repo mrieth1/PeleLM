@@ -40,6 +40,10 @@
 
 #include <AMReX_buildInfo.H>
 
+#ifdef AMREX_USE_SUNDIALS_3x4x
+#include <actual_Creactor.h>
+#endif
+
 using namespace amrex;
 
 static Box stripBox; // used for debugging
@@ -322,51 +326,51 @@ PeleLM::init_extern ()
 }
 
 
-bool
-PeleLM::solveChemistry_sdc(FArrayBox&        rhoYnew,
-		       FArrayBox&        rhoHnew,
-		       FArrayBox&        Tnew,
-		       const FArrayBox&  rhoYold,
-		       const FArrayBox&  rhoHold,
-		       const FArrayBox&  Told,
-		       const FArrayBox&  const_src,
-		       FArrayBox&        FuncCount,
-		       const Box&        box,
-		       int               sComprhoY,
-		       int               sComprhoH,
-		       int               sCompT,
-		       Real              dt,
-		       FArrayBox*        chemDiag,
-                       bool              use_stiff_solver) const
-{
-    BL_ASSERT(sComprhoY+nspecies <= rhoYnew.nComp());
-    BL_ASSERT(sComprhoY+nspecies <= rhoYold.nComp());
-    BL_ASSERT(sComprhoH < rhoHnew.nComp());
-    BL_ASSERT(sComprhoH < rhoHold.nComp());
-    BL_ASSERT(sCompT    < Tnew.nComp());
-    BL_ASSERT(sCompT    < Told.nComp());
-    
-    BL_ASSERT(rhoYnew.box().contains(box) && rhoYold.box().contains(box));
-    BL_ASSERT(rhoHnew.box().contains(box) && rhoHold.box().contains(box));
-    BL_ASSERT(Tnew.box().contains(box)    && Told.box().contains(box));
-
-    // do_diag is no longer used
-    const int do_diag  = (chemDiag!=0);
-    Real*     diagData = do_diag ? chemDiag->dataPtr() : 0;
-    const int do_stiff = (use_stiff_solver);
-
-    int success = pphys_CONPsolv_SDC(box.loVect(), box.hiVect(),
-				    rhoYnew.dataPtr(sComprhoY), ARLIM(rhoYnew.loVect()),   ARLIM(rhoYnew.hiVect()),
-				    rhoHnew.dataPtr(sComprhoH), ARLIM(rhoHnew.loVect()),   ARLIM(rhoHnew.hiVect()),
-				    Tnew.dataPtr(sCompT),       ARLIM(Tnew.loVect()),      ARLIM(Tnew.hiVect()),
-				    rhoYold.dataPtr(sComprhoY), ARLIM(rhoYold.loVect()),   ARLIM(rhoYold.hiVect()),
-				    rhoHold.dataPtr(sComprhoH), ARLIM(rhoHold.loVect()),   ARLIM(rhoHold.hiVect()),
-				    Told.dataPtr(sCompT),       ARLIM(Told.loVect()),      ARLIM(Told.hiVect()),
-				    const_src.dataPtr(0),       ARLIM(const_src.loVect()), ARLIM(const_src.hiVect()),
-				    FuncCount.dataPtr(),        ARLIM(FuncCount.loVect()), ARLIM(FuncCount.hiVect()),
-				    &dt, diagData, &do_diag, &do_stiff);
-    return success > 0;
-}
+//bool
+//PeleLM::solveChemistry_sdc(FArrayBox&        rhoYnew,
+//		       FArrayBox&        rhoHnew,
+//		       FArrayBox&        Tnew,
+//		       const FArrayBox&  rhoYold,
+//		       const FArrayBox&  rhoHold,
+//		       const FArrayBox&  Told,
+//		       const FArrayBox&  const_src,
+//		       FArrayBox&        FuncCount,
+//		       const Box&        box,
+//		       int               sComprhoY,
+//		       int               sComprhoH,
+//		       int               sCompT,
+//		       Real              dt,
+//		       FArrayBox*        chemDiag,
+//                       bool              use_stiff_solver) const
+//{
+//    BL_ASSERT(sComprhoY+nspecies <= rhoYnew.nComp());
+//    BL_ASSERT(sComprhoY+nspecies <= rhoYold.nComp());
+//    BL_ASSERT(sComprhoH < rhoHnew.nComp());
+//    BL_ASSERT(sComprhoH < rhoHold.nComp());
+//    BL_ASSERT(sCompT    < Tnew.nComp());
+//    BL_ASSERT(sCompT    < Told.nComp());
+//    
+//    BL_ASSERT(rhoYnew.box().contains(box) && rhoYold.box().contains(box));
+//    BL_ASSERT(rhoHnew.box().contains(box) && rhoHold.box().contains(box));
+//    BL_ASSERT(Tnew.box().contains(box)    && Told.box().contains(box));
+//
+//    // do_diag is no longer used
+//    const int do_diag  = (chemDiag!=0);
+//    Real*     diagData = do_diag ? chemDiag->dataPtr() : 0;
+//    const int do_stiff = (use_stiff_solver);
+//
+//    int success = pphys_CONPsolv_SDC(box.loVect(), box.hiVect(),
+//				    rhoYnew.dataPtr(sComprhoY), ARLIM(rhoYnew.loVect()),   ARLIM(rhoYnew.hiVect()),
+//				    rhoHnew.dataPtr(sComprhoH), ARLIM(rhoHnew.loVect()),   ARLIM(rhoHnew.hiVect()),
+//				    Tnew.dataPtr(sCompT),       ARLIM(Tnew.loVect()),      ARLIM(Tnew.hiVect()),
+//				    rhoYold.dataPtr(sComprhoY), ARLIM(rhoYold.loVect()),   ARLIM(rhoYold.hiVect()),
+//				    rhoHold.dataPtr(sComprhoH), ARLIM(rhoHold.loVect()),   ARLIM(rhoHold.hiVect()),
+//				    Told.dataPtr(sCompT),       ARLIM(Told.loVect()),      ARLIM(Told.hiVect()),
+//				    const_src.dataPtr(0),       ARLIM(const_src.loVect()), ARLIM(const_src.hiVect()),
+//				    FuncCount.dataPtr(),        ARLIM(FuncCount.loVect()), ARLIM(FuncCount.hiVect()),
+//				    &dt, diagData, &do_diag, &do_stiff);
+//    return success > 0;
+//}
 
 void
 PeleLM::reactionRateRhoY_pphys(FArrayBox&       RhoYdot,

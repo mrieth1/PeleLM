@@ -389,21 +389,21 @@ private:
 
   static void init_transport (int iEG);
 
-  bool solveChemistry_sdc(amrex::FArrayBox&        rhoYnew,
-                            amrex::FArrayBox&        rhoHnew,
-                            amrex::FArrayBox&        Tnew,
-                            const amrex::FArrayBox&  rhoYold,
-                            const amrex::FArrayBox&  rhoHold,
-                            const amrex::FArrayBox&  Told,
-                            const amrex::FArrayBox&  const_src,
-                            amrex::FArrayBox&        FuncCount,
-                            const amrex::Box&        box,
-                            int               sComprhoY,
-                            int               sComprhoH,
-                            int               sCompT,
-                            amrex::Real              dt,
-                            amrex::FArrayBox*        chemDiag,
-                            bool              use_stiff_solver = true) const;
+  //bool solveChemistry_sdc(amrex::FArrayBox&        rhoYnew,
+  //                          amrex::FArrayBox&        rhoHnew,
+  //                          amrex::FArrayBox&        Tnew,
+  //                          const amrex::FArrayBox&  rhoYold,
+  //                          const amrex::FArrayBox&  rhoHold,
+  //                          const amrex::FArrayBox&  Told,
+  //                          const amrex::FArrayBox&  const_src,
+  //                          amrex::FArrayBox&        FuncCount,
+  //                          const amrex::Box&        box,
+  //                          int               sComprhoY,
+  //                          int               sComprhoH,
+  //                          int               sCompT,
+  //                          amrex::Real              dt,
+  //                          amrex::FArrayBox*        chemDiag,
+  //                          bool              use_stiff_solver = true) const;
 
   void reactionRateRhoY_pphys(amrex::FArrayBox&       RhoYdot,
                           const amrex::FArrayBox& RhoY,

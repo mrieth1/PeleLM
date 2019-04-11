@@ -20,6 +20,16 @@ TINY_PROFILE = FALSE
 
 DEFINES+=-DALWAYS_NEW_J
 
+#######################
+USE_SUNDIALS_3x4x = FALSE
+
+USE_KLU = FALSE
+ifeq ($(USE_KLU), TRUE)
+	DEFINES  += -DUSE_KLU
+	include Make.CVODE
+endif
+#######################
+
 # Enable flctin namelist
 #USE_FLCTS       = TRUE
 

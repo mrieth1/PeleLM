@@ -39,6 +39,9 @@
 #include <PeleLM_F.H>
 #include <AMReX_Utility.H>
 #include <NS_error_F.H>
+#ifdef AMREX_USE_SUNDIALS_3x4x
+#include <actual_Creactor.h>
+#endif
 
 using namespace amrex;
 
@@ -441,7 +444,11 @@ PeleLM::variableSetUp ()
   /* PelePhysics */
   amrex::Print() << " Initialization of network, reactor and transport \n";
   init_network();
+#ifdef AMREX_USE_SUNDIALS_3x4x
+  reactor_init(&cvode_iE,&ncells_packing);
+#else
   reactor_init(&cvode_iE);
+#endif
   init_transport(use_tranlib);
 
   BCRec bc;
