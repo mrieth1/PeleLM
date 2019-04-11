@@ -1082,7 +1082,7 @@ contains
       use chem_driver, only: get_spec_name
       USE mod_chemdriver_defs, ONLY : typVal_Density, typVal_Temp, typVal_RhoH, typVal_Trac, &
                                       typVal_Y, typVal_Vel, typVal_YMIN, typVal_YMAX, iN2, iE_sp, &
-                                      Na, invmwt
+                                      Na, spec_charge,  CperEcharge, zk
 
       implicit none
       integer    level, nscal
@@ -1105,6 +1105,10 @@ contains
       REAL_T pert,Lx,eta,u,v,rho,T,h
       REAL_T sigma
 
+#ifdef USE_EFIELD      
+      REAL_T :: CD, sum_pos_ion, mean_zk_pos_ion
+#endif
+
       integer iO2,iCO2,iH2O,iCH3OCH3,len
       character*(maxspnml) name
 
@@ -1124,14 +1128,14 @@ contains
                x = (float(i)+.5d0)*delta(1)+domnlo(1)
                
                pert = 0.d0
-               if (pertmag .gt. 0.d0) then
-                  Lx = domnhi(1) - domnlo(1)
-                  pert = pertmag*(1.000 * sin(2*Pi*4*x/Lx) &
-                      + 1.023 * sin(2*Pi*2*(x-.004598)/Lx) &
-                         + 0.945 * sin(2*Pi*3*(x-.00712435)/Lx)  &
-                             + 1.017 * sin(2*Pi*5*(x-.0033)/Lx)  &
-                                  + .982 * sin(2*Pi*5*(x-.014234)/Lx) )
-               endif
+         !      if (pertmag .gt. 0.d0) then
+         !         Lx = domnhi(1) - domnlo(1)
+         !         pert = pertmag*(1.000 * sin(2*Pi*4*x/Lx) &
+         !             + 1.023 * sin(2*Pi*2*(x-.004598)/Lx) &
+         !                + 0.945 * sin(2*Pi*3*(x-.00712435)/Lx)  &
+         !                    + 1.017 * sin(2*Pi*5*(x-.0033)/Lx)  &
+         !                         + .982 * sin(2*Pi*5*(x-.014234)/Lx) )
+         !      endif
                   
                y1 = (y - standoff - 0.5d0*delta(2) + pert)*100.d0
                y2 = (y - standoff + 0.5d0*delta(2) + pert)*100.d0
@@ -1148,12 +1152,34 @@ contains
                
                CALL CKXTY (Xl, IWRK, RWRK, Yl)
 
+
 #ifdef USE_EFIELD
 !              Clean the iE_sp field and init nE component               
 !              Does not ensure electro-neutral conditions for now ...
-               Yl(iN2) =  Yl(iN2) + Yl(iE_sp)
-               scal(i,j,nE) = Yl(iE_sp)
                Yl(iE_sp) = 0.0d0
+               Yl(iN2) = 0.0d0
+               Yl(iN2) =  1.0d0 - SUM(Yl(1:Nspec))
+!              At positions where CD is negative before adding the electrons, the flow cannot be made electro-neutral
+!              with a positive electron number density. Therefore, increase the proportion of positive ions such that it
+!              is electro-neutral without electrons.
+               CD = SUM(zk(:)*Yl(1:Nspec))
+               IF ( CD < 0.0d0 ) THEN
+                  sum_pos_ion = 0.0d0   
+                  mean_zk_pos_ion = 0.0d0
+                  DO n = 1, nspec
+                     IF ( spec_charge(n) > 0 ) THEN
+                        sum_pos_ion = sum_pos_ion + Yl(n)
+                        mean_zk_pos_ion = mean_zk_pos_ion + Yl(n) * zk(n)
+                     END IF
+                  END DO
+                  DO n = 1, nspec
+                     IF ( spec_charge(n) > 0 ) THEN
+                        Yl(iN2) = Yl(iN2) + Yl(n) / sum_pos_ion * CD / mean_zk_pos_ion * sum_pos_ion
+                        Yl(n) = Yl(n) - Yl(n) / sum_pos_ion * CD / mean_zk_pos_ion * sum_pos_ion 
+                     ENd IF
+                  END DO
+               END IF
+
                scal(i,j,PhiV) = 0.d0
 #endif
                
@@ -1315,13 +1341,14 @@ contains
 
       do j = lo(2), hi(2)
          do i = lo(1), hi(1)
+#ifdef USE_EFIELD
+            CD = scal(i,j,Density) * SUM(zk(:)*scal(i,j,FirstSpec:FirstSpec+Nspec-1))
+            scal(i,j,nE) = MAX(CD / CperEcharge, 1.0d-30)
+#endif
             do n = 0,Nspec-1
                scal(i,j,FirstSpec+n) = scal(i,j,FirstSpec+n)*scal(i,j,Density)
             enddo
             scal(i,j,RhoH) = scal(i,j,RhoH)*scal(i,j,Density)
-#ifdef USE_EFIELD
-            scal(i,j,nE) = scal(i,j,nE) * scal(i,j,Density) * invmwt(iE_sp) * Na
-#endif
          enddo
       enddo
 
