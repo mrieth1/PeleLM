@@ -307,7 +307,7 @@ contains
 
 !   Compute const variables    
     CALL CKCHRG(IWRK(ckbi), RWRK(ckbr), spec_charge(1))
-    invmwt(:) = RWRK(NWTI:NWTI+Nspec-1)
+    invmwt(:) = RWRK(NWTI:NWTI+Nspec-1) * 1000.0d0
     zk(:) = CperECharge * Na * spec_charge(:) * invmwt(:)
 
 !   Find E species index
