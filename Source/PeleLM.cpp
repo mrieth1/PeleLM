@@ -5386,7 +5386,8 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 
   const Real strt_time = ParallelDescriptor::second();
 
-  const bool do_avg_down_chem = avg_down_chem
+  // Force this to false for now
+  const bool do_avg_down_chem = false
     && level < parent->finestLevel()
     && getLevel(level+1).state[RhoYdot_Type].hasOldData();
 
@@ -5476,27 +5477,62 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 #endif  
     for (MFIter Smfi(STemp,true); Smfi.isValid(); ++Smfi)
     {
-      const FArrayBox& rYo      = STemp[Smfi];
-      const FArrayBox& rHo      = STemp[Smfi];
-      const FArrayBox& To       = STemp[Smfi];
       FArrayBox&       rYn      = STemp[Smfi];
-      FArrayBox&       rHn      = STemp[Smfi];
-      FArrayBox&       Tn       = STemp[Smfi];
       const Box&       bx       = Smfi.tilebox();
       FArrayBox&       fc       = fcnCntTemp[Smfi];
       const FArrayBox& frc      = FTemp[Smfi];
       FArrayBox*       chemDiag = (do_diag ? &(diagTemp[Smfi]) : 0);
 
-      BoxArray ba = do_avg_down_chem ? amrex::complementIn(bx,cf_grids) : BoxArray(bx);
+      //DVODE VERSION
+      //BoxArray ba = do_avg_down_chem ? amrex::complementIn(bx,cf_grids) : BoxArray(bx);
+      //
+      //for (int i = 0; i < ba.size(); ++i)
+      //{
 
-      for (int i = 0; i < ba.size(); ++i)
-      {
-        const int s_spec = 0, s_rhoh = nspecies, s_temp = nspecies+2;
+      //CVODE
+      /* P not used, need to change that */
+      double pressure = 1013250.0;
+      Real dt_incr = dt;
+      Real time_init = 0;
+      int reInit = 1;
 
-        solveChemistry_sdc(rYn,rHn,Tn,rYo,rHo,To,frc,fc,ba[i],
-                                  s_spec,s_rhoh,s_temp,dt,chemDiag,
-				  use_stiff_solver);
+      const auto len = amrex::length(bx);
+      const auto lo  = amrex::lbound(bx); 
+      //const auto hi  = amrex::ubound(bx);
+
+      const auto rhoY   = rYn.view(lo);
+      const auto fcl    = fc.view(lo);
+      const auto frcing = frc.view(lo);
+
+      /* only one cell packed for now */
+      double tmp_vect[ncells_packing*(nspecies+1)];
+      double tmp_src_vect[ncells_packing*nspecies];
+      double tmp_vect_energy[ncells_packing];
+      double tmp_src_vect_energy[ncells_packing];
+      int nc = 0;
+      for         (int k = 0; k < len.z; ++k) {
+          for         (int j = 0; j < len.y; ++j) {
+              for         (int i = 0; i < len.x; ++i) {
+                  for (int sp=0;sp<nspecies; sp++){
+                      tmp_vect[nc*(nspecies+1) + sp] = rhoY(i,j,k,sp) * 1.e-3;
+		      tmp_src_vect[nc*nspecies + sp] = frcing(i,j,k,sp) * 1.e-3;
+                  }
+		  tmp_vect[nc*(nspecies+1) + nspecies] = rhoY(i,j,k,nspecies+2);
+		  tmp_vect_energy[nc]                  = rhoY(i,j,k,nspecies) * 10.0;
+		  tmp_src_vect_energy[nc]              = frcing(i,j,k,nspecies) * 10.0;
+		  fcl(i,j,k) = react(tmp_vect, tmp_src_vect,
+				  tmp_vect_energy, tmp_src_vect_energy,
+				  &pressure, &dt_incr, &time_init, &reInit);
+		  dt_incr = dt;
+		  for (int sp=0;sp<nspecies; sp++){
+	              rhoY(i,j,k,sp) = tmp_vect[nc*(nspecies+1) + sp] * 1.e+3;
+		  }
+		  rhoY(i,j,k,nspecies+2) = tmp_vect[nc*(nspecies+1) + nspecies]; 
+	          rhoY(i,j,k,nspecies) = tmp_vect_energy[nc] * 1.e-01;
+	      }
+          }
       }
+    //}
     }
 
     FTemp.clear();

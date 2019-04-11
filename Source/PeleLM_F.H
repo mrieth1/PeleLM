@@ -69,6 +69,10 @@ extern "C" {
 
   int reactor_init(const int* cvode_iE);
 
+  int react(amrex::Real *rY_in, amrex::Real *rY_src_in, 
+		  amrex::Real *rX_in, amrex::Real *rX_src_in,
+		  amrex::Real *P_in,  amrex::Real *dt_react, amrex::Real *time, int *Init);
+
   void pphys_reactor_close();
 
   void pphys_transport_init(int* ieg);
