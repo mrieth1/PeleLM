@@ -588,6 +588,11 @@ private:
   static int  cvode_iE;
   static int  cvode_iDense;
   static int  ncells_packing;
+
+  static int min_tag;
+  static int max_tag;
+  static int         evaluate_fc;
+  static amrex::Vector<int> tag_bds;
     
   static int nGrowAdvForcing;
 

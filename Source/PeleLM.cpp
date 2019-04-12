@@ -176,6 +176,10 @@ Vector<Real> PeleLM::typical_values;
 int PeleLM::sdc_iterMAX;
 int PeleLM::num_mac_sync_iter;
 int PeleLM::iter_debug;
+int PeleLM::evaluate_fc;
+Vector<int> PeleLM::tag_bds; 
+int PeleLM::min_tag;
+int PeleLM::max_tag;
 
 int PeleLM::mHtoTiterMAX;
 Vector<amrex::Real> PeleLM::mTmpData; 
@@ -653,6 +657,9 @@ PeleLM::Initialize ()
   PeleLM::sdc_iterMAX               = 1;
   PeleLM::num_mac_sync_iter         = 1;
   PeleLM::iter_debug                = 0;
+  PeleLM::evaluate_fc               = 1;
+  PeleLM::min_tag                   = 100000000;
+  PeleLM::max_tag                   = -1;
   PeleLM::mHtoTiterMAX              = 20;
   PeleLM::cvode_iJac                = 0;
   PeleLM::cvode_iE                  = 2;
@@ -1338,6 +1345,8 @@ PeleLM::init_once ()
                                     && RhoYdot_Type != Divu_Type
                                     && RhoYdot_Type != Dsdt_Type
                                     && RhoYdot_Type != State_Type;
+
+  tag_bds.resize(4);
   //
   // This is the minimum number of boxes per MPI proc that I want
   // when chopping up chemistry work.
@@ -2546,6 +2555,8 @@ PeleLM::post_init (Real stop_time)
       getLevel(k).setTimeLevel(cur_time,dt_init,dt_init);
     }
   } // end divu_iters
+
+  evaluate_fc = 0;
 
     //
     // Initialize the pressure by iterating the initial timestep.
@@ -5466,9 +5477,9 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 
     if (do_diag)
     {
-	amrex::Print() << "*** DO DIAG ??" << '\n';
-        diagTemp.define(ba, dm, auxDiag["REACTIONS"]->nComp(), 0);
-        diagTemp.copy(*auxDiag["REACTIONS"]); // Parallel copy
+	amrex::Abort("*** DO DIAG ??");
+        //diagTemp.define(ba, dm, auxDiag["REACTIONS"]->nComp(), 0);
+        //diagTemp.copy(*auxDiag["REACTIONS"]); // Parallel copy
     }
 
     if (verbose) 
@@ -5476,6 +5487,10 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 
     STemp.copy(mf_old,first_spec,0,nspecies+3); // Parallel copy.
     FTemp.copy(Force);                          // Parallel copy.
+
+    MultiFab& FC = get_new_data(FuncCount_Type);
+    fcnCntTemp.copy(FC,0,0,1,std::min(ngrow,FC.nGrow()),0);
+
 #ifdef _OPENMP
 #pragma omp parallel
 #endif  
@@ -5486,6 +5501,8 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       FArrayBox&       fc       = fcnCntTemp[Smfi];
       const FArrayBox& frc      = FTemp[Smfi];
       FArrayBox*       chemDiag = (do_diag ? &(diagTemp[Smfi]) : 0);
+
+      int num_cell_in_FAB = bx.numPts();
 
       //DVODE VERSION
       //BoxArray ba = do_avg_down_chem ? amrex::complementIn(bx,cf_grids) : BoxArray(bx);
@@ -5508,36 +5525,147 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       const auto fcl    = fc.view(lo);
       const auto frcing = frc.view(lo);
 
-      /* only one cell packed for now */
-      double tmp_vect[ncells_packing*(nspecies+1)];
-      double tmp_src_vect[ncells_packing*nspecies];
-      double tmp_vect_energy[ncells_packing];
-      double tmp_src_vect_energy[ncells_packing];
-      int nc = 0;
-      for         (int k = 0; k < len.z; ++k) {
-          for         (int j = 0; j < len.y; ++j) {
-              for         (int i = 0; i < len.x; ++i) {
-                  for (int sp=0;sp<nspecies; sp++){
-                      tmp_vect[nc*(nspecies+1) + sp] = rhoY(i,j,k,sp) * 1.e-3;
-		      tmp_src_vect[nc*nspecies + sp] = frcing(i,j,k,sp) * 1.e-3;
-                  }
-		  tmp_vect[nc*(nspecies+1) + nspecies] = rhoY(i,j,k,nspecies+2);
-		  tmp_vect_energy[nc]                  = rhoY(i,j,k,nspecies) * 10.0;
-		  tmp_src_vect_energy[nc]              = frcing(i,j,k,nspecies) * 10.0;
-		  fcl(i,j,k) = react(tmp_vect, tmp_src_vect,
+      if (verbose > 2) 
+        amrex::Print() << "     *** advance_chemistry: New Fab, evaluate fc ?? " << evaluate_fc << '\n';
+
+      if (evaluate_fc) {
+          /* only one cell packed for now */
+          double tmp_vect[(nspecies+1)];
+          double tmp_src_vect[nspecies];
+          double tmp_vect_energy[1];
+          double tmp_src_vect_energy[1];
+          int nc = 0;
+          for         (int k = 0; k < len.z; ++k) {
+              for         (int j = 0; j < len.y; ++j) {
+                  for         (int i = 0; i < len.x; ++i) {
+                      for (int sp=0;sp<nspecies; sp++){
+                          tmp_vect[nc*(nspecies+1) + sp] = rhoY(i,j,k,sp) * 1.e-3;
+		          tmp_src_vect[nc*nspecies + sp] = frcing(i,j,k,sp) * 1.e-3;
+                      }    
+		      tmp_vect[nc*(nspecies+1) + nspecies] = rhoY(i,j,k,nspecies+2);
+		      tmp_vect_energy[nc]                  = rhoY(i,j,k,nspecies) * 10.0;
+		      tmp_src_vect_energy[nc]              = frcing(i,j,k,nspecies) * 10.0;
+		      fcl(i,j,k) = react(tmp_vect, tmp_src_vect,
 				  tmp_vect_energy, tmp_src_vect_energy,
 				  &pressure, &dt_incr, &time_init, &reInit);
-		  dt_incr = dt;
-		  for (int sp=0;sp<nspecies; sp++){
-	              rhoY(i,j,k,sp) = tmp_vect[nc*(nspecies+1) + sp] * 1.e+3;
-		  }
-		  rhoY(i,j,k,nspecies+2) = tmp_vect[nc*(nspecies+1) + nspecies]; 
-	          rhoY(i,j,k,nspecies) = tmp_vect_energy[nc] * 1.e-01;
-	      }
+		      dt_incr = dt;
+		      // Find the tag bounds
+		      //if (fcl(i,j,k) < min_tag) {
+		      //    min_tag = fcl(i,j,k);
+		      //} else if (fcl(i,j,k) > max_tag ) {
+		      //    max_tag = fcl(i,j,k);
+		      //}
+		      for (int sp=0;sp<nspecies; sp++){
+	                  rhoY(i,j,k,sp) = tmp_vect[nc*(nspecies+1) + sp] * 1.e+3;
+		      }
+		      rhoY(i,j,k,nspecies+2) = tmp_vect[nc*(nspecies+1) + nspecies]; 
+	              rhoY(i,j,k,nspecies) = tmp_vect_energy[nc] * 1.e-01;
+	          }
+              }
           }
-      }
-    //}
+      } else {
+          double tmp_vect[ncells_packing*(nspecies+1)];
+          double tmp_src_vect[ncells_packing*nspecies];
+          double tmp_vect_energy[ncells_packing];
+          double tmp_src_vect_energy[ncells_packing];
+
+	  int indx_i[ncells_packing];
+	  int indx_j[ncells_packing];
+	  int indx_k[ncells_packing];
+
+          int nc = 0;
+	  int num_cell_cvode_int = 0;
+	  for         (int tag = 0; tag < 3; ++tag) {
+              nc = 0;
+              for         (int k = 0; k < len.z; ++k) {
+                  for         (int j = 0; j < len.y; ++j) {
+                      for         (int i = 0; i < len.x; ++i) {
+                          if ((fcl(i,j,k) > tag_bds[tag]) && (fcl(i,j,k) <= tag_bds[tag+1])) {
+                              for (int sp=0;sp<nspecies; sp++){
+                                  tmp_vect[nc*(nspecies+1) + sp] = rhoY(i,j,k,sp) * 1.e-3;
+				  tmp_src_vect[nc*nspecies + sp] = frcing(i,j,k,sp) * 1.e-3;
+                              }
+			      tmp_vect[nc*(nspecies+1) + nspecies] = rhoY(i,j,k,nspecies+2);
+			      tmp_vect_energy[nc]                  = rhoY(i,j,k,nspecies) * 10.0;
+			      tmp_src_vect_energy[nc]              = frcing(i,j,k,nspecies) * 10.0;
+			      //
+			      indx_i[nc] = i;
+			      indx_j[nc] = j;
+                              indx_k[nc] = k;
+			      //
+			      nc = nc+1;
+			      //
+			      num_cell_cvode_int = num_cell_cvode_int + 1;
+			  }
+			  if (nc == ncells_packing) {
+                              react(tmp_vect, tmp_src_vect,
+				  tmp_vect_energy, tmp_src_vect_energy,
+				  &pressure, &dt_incr, &time_init, &reInit);
+		              dt_incr = dt;
+			      nc = 0;
+			      for (int l = 0; l < ncells_packing ; ++l){
+                                  for (int sp=0;sp<nspecies; sp++){
+                                      rhoY(indx_i[l],indx_j[l],indx_k[l],sp) = tmp_vect[l*(nspecies+1) + sp]* 1.e+3;
+				  }
+				  rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies+2) = tmp_vect[l*(nspecies+1) + nspecies];
+				  rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies)   = tmp_vect_energy[l] * 1.e-01;
+			      }
+			  }
+		      }
+		  }
+	      }
+              if ((nc != ncells_packing)&&(nc != 0)) {
+                  printf(" WARNING !! Not enough cells (%d) in tag %d to fill %d \n", nc, tag, ncells_packing);
+		  printf("            ... filling with dummy state \n ");
+		  int nc_tmp = nc;
+		  for (int i = nc; i < ncells_packing; ++i) {
+                      for (int sp=0;sp<nspecies; sp++){
+                          tmp_vect[i*(nspecies+1) + sp] = rhoY(0,0,0,sp) * 1.e-3;
+			  tmp_src_vect[i*nspecies + sp] = 0.0; 
+		      }
+		      tmp_vect[i*(nspecies+1) + nspecies] = rhoY(0,0,0,nspecies+2);
+		      tmp_vect_energy[i]                  = rhoY(0,0,0,nspecies) * 10.0;
+		      tmp_src_vect_energy[i]              = 0.0;
+		  }
+		  react(tmp_vect, tmp_src_vect, tmp_vect_energy, tmp_src_vect_energy, 
+				  &pressure, &dt_incr, &time_init, &reInit);
+		  dt_incr = dt;
+		  nc = 0;
+		  for (int l = 0; l < nc_tmp ; ++l){
+                      for (int sp=0;sp<nspecies; sp++){
+                          rhoY(indx_i[l],indx_j[l],indx_k[l],sp) = tmp_vect[l*(nspecies+1) + sp]* 1.e+3;
+		      }
+		      rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies+2) = tmp_vect[l*(nspecies+1) + nspecies];
+		      rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies)   = tmp_vect_energy[l] * 1.e-01;
+		  }
+	      }
+	  }
+	  if (num_cell_cvode_int != num_cell_in_FAB ) {
+	      amrex::Print() << num_cell_cvode_int << " ? " << num_cell_in_FAB << std::endl;
+              amrex::Abort("Inconsistent number of integrated cells !! ");
+	  }
+
+      }    
     }
+
+    // Will not work with MPI ...
+    if (evaluate_fc) {
+	  //min_tag = fcnCntTemp.min(0);
+          //max_tag = fcnCntTemp.max(0);
+	  tag_bds[0] = std::min(min_tag, (int) fcnCntTemp.min(0) - 1);
+	  tag_bds[3] = std::max(max_tag, (int) fcnCntTemp.max(0) + 1);
+	  tag_bds[2] = tag_bds[0] + (tag_bds[3] - tag_bds[0])/3;
+	  tag_bds[1] = tag_bds[0] + (tag_bds[2] - tag_bds[0])/3;
+
+	  min_tag = tag_bds[0];
+	  max_tag = tag_bds[3];
+
+          if (verbose ) {
+              amrex::Print() << " Evaluate tags(min, max) = " << min_tag << " " << max_tag << " " << std::endl;
+              amrex::Print() << "                    tags = " << tag_bds[0]  << " " << tag_bds[1] << " " << tag_bds[2] << " " << tag_bds[3] << std::endl;
+	  }
+    }
+    //amrex::Abort();
 
     FTemp.clear();
 
@@ -5561,8 +5689,10 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       diagTemp.clear();
     }
 
-    MultiFab& FC = get_new_data(FuncCount_Type);
-    FC.copy(fcnCntTemp,0,0,1,0,std::min(ngrow,FC.nGrow()));
+    if (evaluate_fc) {
+        //MultiFab& FC = get_new_data(FuncCount_Type);
+        FC.copy(fcnCntTemp,0,0,1,0,std::min(ngrow,FC.nGrow()));
+    }
 
     fcnCntTemp.clear();
     //
