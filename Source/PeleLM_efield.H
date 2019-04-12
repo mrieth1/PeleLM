@@ -22,9 +22,11 @@
 	amrex::MultiFab    kappaElec_cc;
 	amrex::MultiFab    diffElec_cc;
 
-	amrex::MultiFab    pnp_X;
+	amrex::MultiFab    pnp_U;
 	amrex::MultiFab    pnp_res;
+	amrex::MultiFab    pnp_dU;
 	amrex::MultiFab    pnp_bgchrg;
+	amrex::MultiFab*   pnp_Ueff;
 
 // Functions	
 	static void ef_init();
@@ -58,6 +60,9 @@
 							  amrex::MultiFab** De_ec,
 							  amrex::Real        dt);
 
+// Residual norm
+   amrex::Real ef_NL_res_norm();
+
 // PNP provisional charge distribution
 	void ef_bg_chrg(amrex::Real      dt,
 						 amrex::MultiFab& Dn,
@@ -65,7 +70,10 @@
 						 amrex::MultiFab& Dhat);
 
 // PNP exit Newton test
-	void test_exit_newton(const int NK_ite, bool& exit_newton);
+	void test_exit_newton(const int NK_ite,
+								 const amrex::Real norm0,
+								 amrex::Real norm,
+								 bool& exit_newton);
 
 // Get electron edge transport properties
 	void ef_get_edge_transport(amrex::MultiFab** ke_ec,

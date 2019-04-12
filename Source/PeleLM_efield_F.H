@@ -1,8 +1,10 @@
+// Fill bndy funct for ne
   void ne_fill (amrex::Real* data, ARLIM_P(data_lo), ARLIM_P(data_hi),
                 const int* dom_lo, const int* dom_hi,
                 const amrex::Real* dx, const amrex::Real* grd_lo,
                 const amrex::Real* time, const int* bc);
 
+// Fill bndy funct for phiV
   void phiv_fill (amrex::Real* data, ARLIM_P(data_lo), ARLIM_P(data_hi),
                   const int* dom_lo, const int* dom_hi,
                   const amrex::Real* dx, const amrex::Real* grd_lo,
@@ -36,7 +38,7 @@
                            const amrex::Real* kpedat,  ARLIM_P(kpelo), ARLIM_P(kpehi),
                            amrex::Real* dedat,         ARLIM_P(delo),  ARLIM_P(dehi));
 
-// Compute background charge distribution for PNP solve: provisional ions fields 
+// Compute background charge distribution for PNP solve: provisional ions fields / q_e
   void ef_calc_chargedist_prov(const int* lo,  const int* hi,
                                const amrex::Real* rhoYold,  ARLIM_P(rYlo),  ARLIM_P(rYhi),
                                const amrex::Real* Aspec,    ARLIM_P(alo),   ARLIM_P(ahi),
@@ -45,13 +47,4 @@
                                const amrex::Real* Dhatspec, ARLIM_P(Dhlo),  ARLIM_P(Dhhi),
                                const amrex::Real* IRspec,   ARLIM_P(ilo),   ARLIM_P(ihi),
                                amrex::Real* bg_chrg,  ARLIM_P(bglo),  ARLIM_P(bghi),
-										 amrex::Real dt);
-
-// PNP non-linear residual function
-  void ef_calc_NL_residual(const int* lo,  const int* hi,
-		                     const amrex::Real* X,  ARLIM_P(xlo),  ARLIM_P(xhi),
-		                     const amrex::Real* Kpe,  ARLIM_P(klo),  ARLIM_P(khi),
-		                     const amrex::Real* De,  ARLIM_P(dlo),  ARLIM_P(dhi),
-		                     const amrex::Real* bg_chrg,  ARLIM_P(bglo),  ARLIM_P(bghi),
-		                     amrex::Real* res,  ARLIM_P(rlo),  ARLIM_P(rhi),
-									amrex::Real dt);
+										 amrex::Real* dt);

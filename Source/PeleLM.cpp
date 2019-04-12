@@ -341,7 +341,7 @@ PeleLM::Initialize ()
   PeleLM::first_spec                = -1;
   PeleLM::last_spec                 = -2;
   PeleLM::nspecies                  = 0;
-  PeleLM::floor_species             = 1;
+  PeleLM::floor_species             = 0;
   PeleLM::do_set_rho_to_species_sum = 1;
   PeleLM::rgas                      = -1.0;
   PeleLM::prandtl                   = .7;

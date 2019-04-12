@@ -2402,6 +2402,7 @@ contains
 
   end subroutine ef_elec_diffusivity
 
+! Compute provisional ions charge distribution divided by elementary charge.   
   subroutine ef_calc_chargedist_prov(lo, hi, &
                                      rhoY_old, DIMS(rhoY_old), &
                                      AofS, DIMS(AofS), &
@@ -2412,7 +2413,7 @@ contains
                                      bg_chrg, DIMS(bg_chrg), &
                                      dt) bind(C, name="ef_calc_chargedist_prov")
 
-  USE mod_chemdriver_defs, ONLY : zk                                
+  USE mod_chemdriver_defs, ONLY : zk, CperECharge
 
   implicit none
 
@@ -2443,44 +2444,12 @@ contains
                                              0.5d0 * ( Dn(i,j,:) - Dnp1(i,j,:) ) + &
                                              Dhat(i,j,:) + &
                                              I_R(i,j,:) )
-      bg_chrg(i,j) = SUM(zk(:) * rhoYprov(:))
+      bg_chrg(i,j) = SUM(zk(1:Nspec) * rhoYprov(1:Nspec)) / CperECharge
     end do
   end do
 
   end subroutine ef_calc_chargedist_prov
 
-  subroutine ef_calc_NL_residual(lo, hi, &
-                                 X, DIMS(X), & 
-                                 Ke, DIMS(Ke), & 
-                                 De, DIMS(De), & 
-                                 bg_chrg, DIMS(bg_chrg), & 
-                                 res, DIMS(res), & 
-                                 dt) bind(C, name="ef_calc_NL_residual")
-                              
-  implicit none                            
-
-  integer :: lo(SDIM),hi(SDIM)
-  integer :: DIMDEC(X)
-  integer :: DIMDEC(Ke)
-  integer :: DIMDEC(De)
-  integer :: DIMDEC(bg_chrg)
-  integer :: DIMDEC(res)
-  REAL_T  :: X(DIMV(X),2)
-  REAL_T  :: Ke(DIMV(Ke))
-  REAL_T  :: De(DIMV(De))
-  REAL_T  :: bg_chrg(DIMV(bg_chrg))
-  REAL_T  :: res(DIMV(res),2)
-  REAL_T  :: dt
-
-  integer :: i, j
-
-  do j = lo(2), hi(2)
-    do i = lo(1), hi(1)
-       res(i,j,:) = 0.0d0
-    end do
-  end do
-
-  end subroutine ef_calc_NL_residual
 #endif  
 
 end module PeleLM_2d

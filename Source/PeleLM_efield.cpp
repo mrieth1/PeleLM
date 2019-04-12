@@ -74,9 +74,12 @@ void PeleLM::ef_define_data() {
    kappaElec_cc.define(grids,dmap,1,1);
    diffElec_cc.define(grids,dmap,1,1);
 
-	pnp_X.define(grids,dmap,2,1);
+	pnp_U.define(grids,dmap,2,1);
 	pnp_res.define(grids,dmap,2,1);
+	pnp_dU.define(grids,dmap,2,1);
 	pnp_bgchrg.define(grids,dmap,1,1);
+
+	pnp_Ueff = new MultiFab[BL_SPACEDIM];
 }
 
 void PeleLM::ef_solve_phiv(Real time) {
@@ -103,10 +106,11 @@ void PeleLM::ef_solve_phiv(Real time) {
       const FArrayBox& rhoY = S[mfi];
       const FArrayBox& ne = S[mfi];
       ef_calc_rhs_poisson(box.loVect(), box.hiVect(),
-                         rhs.dataPtr(),            ARLIM(rhs.loVect()),    ARLIM(rhs.hiVect()),
+                         rhs.dataPtr(0),           ARLIM(rhs.loVect()),    ARLIM(rhs.hiVect()),
 					          rhoY.dataPtr(first_spec), ARLIM(rhoY.loVect()),   ARLIM(rhoY.hiVect()),
 					          ne.dataPtr(nE),           ARLIM(ne.loVect()),     ARLIM(ne.hiVect()));
    }
+	showMF("pnp",rhs_poisson,"pnp_rhspoisson",level);
 
 // Set-up solver tolerances
    const Real S_tol     = ef_phiV_tol;
@@ -163,62 +167,6 @@ void PeleLM::ef_init() {
 	pp.query("MG_PhiV_tol",ef_phiV_tol);
 }
 
-// Setup BC conditions for linear Poisson solve on PhiV. Directly copied from the diffusion one ...
-void PeleLM::ef_set_PoissonBC(std::array<LinOpBCType,AMREX_SPACEDIM>& mlmg_lobc,
-                              std::array<LinOpBCType,AMREX_SPACEDIM>& mlmg_hibc) {
-
-    const BCRec& bc = get_desc_lst()[State_Type].getBC(PhiV);
-
-    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
-    {
-        if (Geometry::isPeriodic(idim))
-        {
-            mlmg_lobc[idim] = mlmg_hibc[idim] = LinOpBCType::Periodic;
-        }
-        else
-        {
-            int pbc = bc.lo(idim);
-            if (pbc == EXT_DIR)
-            {
-                mlmg_lobc[idim] = LinOpBCType::Dirichlet;
-            }
-            else if (pbc == FOEXTRAP      ||
-                     pbc == HOEXTRAP      || 
-                     pbc == REFLECT_EVEN)
-            {
-                mlmg_lobc[idim] = LinOpBCType::Neumann;
-            }
-            else if (pbc == REFLECT_ODD)
-            {
-                mlmg_lobc[idim] = LinOpBCType::reflect_odd;
-            }
-            else
-            {
-                mlmg_lobc[idim] = LinOpBCType::bogus;
-            }
-
-            pbc = bc.hi(idim);
-            if (pbc == EXT_DIR)
-            {
-                mlmg_hibc[idim] = LinOpBCType::Dirichlet;
-            }
-            else if (pbc == FOEXTRAP      ||
-                     pbc == HOEXTRAP      || 
-                     pbc == REFLECT_EVEN)
-            {
-                mlmg_hibc[idim] = LinOpBCType::Neumann;
-				} 
-            else if (pbc == REFLECT_ODD)
-            {
-                mlmg_hibc[idim] = LinOpBCType::reflect_odd;
-            }
-            else
-            {
-                mlmg_hibc[idim] = LinOpBCType::bogus;
-            }
-        }
-    }
-}
 
 void PeleLM::ef_solve_PNP(Real dt, 
 							     Real time, 
@@ -228,18 +176,12 @@ void PeleLM::ef_solve_PNP(Real dt,
 
 	BL_PROFILE("EF::ef_solve_PNP()");
 
-// Update ne BC before going further	
-//	MultiFab&  S = get_new_data(State_Type);
-//	FillPatchIterator nefpi(*this,S,1,time,State_Type,nE,1);
-//	MultiFab& nemf = nefpi.get_mf();
-//	MultiFab::Copy(S,nemf,0,nE,1,1);
-
 // Get edge-averaged transport properties	
    FluxBoxes diff_e(this, 1, 0);
    FluxBoxes conv_e(this, 1, 0);
    MultiFab** kappaElec_ec = conv_e.get();
    MultiFab** diffElec_ec = diff_e.get();
-   ef_get_edge_transport(diffElec_ec, kappaElec_ec); 
+   ef_get_edge_transport(kappaElec_ec, diffElec_ec); 
 
 // Copy some stuff ? Need: macvel, Diff_e, Kp_e, SDC_force, Godunov_force	
 // Need the old version of nE
@@ -250,7 +192,7 @@ void PeleLM::ef_solve_PNP(Real dt,
 	MultiFab&  S_old = get_old_data(State_Type);
 	MultiFab nE_old_alias(S_old,amrex::make_alias,nE,1);
 
-	MultiFab::Copy(pnp_X, S, nE, 0, 2, 1);
+	MultiFab::Copy(pnp_U, S, nE, 0, 2, 1);
 // Get X scale matrix data : TypValue of nE and PhiV
 
 // Compute provisional CD
@@ -260,16 +202,37 @@ void PeleLM::ef_solve_PNP(Real dt,
 // Get a MF for just nE and PhiV ?
 // Get the initial residuals
    ef_NL_residual( nE_old_alias, kappaElec_ec, diffElec_ec, dt );
+   const Real norm_NL_res0 = ef_NL_res_norm();
 // Get the residual scaling
 // Check for direct convergence
 // Get data for globalization algo: in 1D I call Jac ... not great ...
+//
+   Real norm_NL_res = norm_NL_res0; 
 
 bool exit_newton = false;
 int NK_ite = 0;	
 do {
 
 	NK_ite += 1;
-	test_exit_newton(NK_ite, exit_newton);
+	amrex::Print() << " Newton it: " << NK_ite << " residual: " << norm_NL_res << "\n";
+
+// Init Newton update	
+   pnp_dU.setVal(0.0); 	
+
+// GMRES 
+//   ef_GMRES_solve(); 	
+
+// Linesearch
+   Real lambda = 1.0; 
+
+// Update Newton solution
+   pnp_dU.mult(lambda,0,2); 
+   pnp_U.plus(pnp_dU,0,2,1);
+//   ef_NL_residual( nE_old_alias, kappaElec_ec, diffElec_ec, dt );
+   norm_NL_res = ef_NL_res_norm();
+
+// Test exit conditions  	
+	test_exit_newton(NK_ite, norm_NL_res0, norm_NL_res, exit_newton);
 
 } while( ! exit_newton );
 
@@ -277,7 +240,22 @@ do {
 
 }
 
-void PeleLM::test_exit_newton(const int NK_ite, bool& exit_newton) {
+Real PeleLM::ef_NL_res_norm() {
+	Real norm = pnp_res.norm2();
+	return norm;
+}
+
+void PeleLM::test_exit_newton(const int NK_ite, 
+									   const Real norm_res0,
+										Real norm_res,
+										bool& exit_newton) {
+
+  const Real tol_Newton = pow(2.0e-16,1.0/3.0);
+  Real max_res = pnp_res.norm0();
+  if ( max_res <= tol_Newton ) {
+	  exit_newton = true;
+	  amrex::Print() << " Converged Newton ite of PNP solve \n";
+  }
 
   if ( NK_ite > ef_max_NK_ite ) {
 	  exit_newton = true;
@@ -309,13 +287,14 @@ void PeleLM::ef_NL_residual(MultiFab&   ne_old,
 
 // Build the non-linear residual	
 // res(ne(:)) = dt * ( diff(:) + conv(:) + I_R(:) ) - ( ne(:) - ne_old(:) )
+// res(phiv(:)) = \Sum z_k * \tilde Y_k / q_e - ne + Lapl_PhiV
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
    for (MFIter mfi(pnp_res,true); mfi.isValid(); ++mfi)
    {
       const Box& box = mfi.tilebox();
-      const FArrayBox& Xfab = pnp_X[mfi];
+      const FArrayBox& Ufab = pnp_U[mfi];
       const FArrayBox& difffab = diff_ne_term[mfi];
       const FArrayBox& convfab = conv_ne_term[mfi];
       const FArrayBox& laplfab = laplacian_term[mfi];
@@ -327,13 +306,11 @@ void PeleLM::ef_NL_residual(MultiFab&   ne_old,
 //	   Resfab.plus(convfab,box,box,0,0,1);		// Add diff term into res for ne
 //	   Resfab.plus(IRefab,box,box,0,0,1);	   // Add forcing term (I_R) into res for ne
 //		Resfab.mult(dt,box,0,1);					// times dt
-//		Resfab.minus(Xfab,box,box,0,0,1);		// Substract current ne
+//		Resfab.minus(Ufab,box,box,0,0,1);		// Substract current ne
 //		Resfab.plus(neoldfab,box,box,0,0,1);	// Add old ne --> Done with ne residuals
-	   Resfab.copy(laplfab,box,0,box,1,1);	// Copy bg charge term into res for phiV
-//	   Resfab.copy(bgchargfab,box,0,box,1,1);	// Copy bg charge term into res for phiV
-//		Resfab.divide(CperECharge,box,1,1);		// Divide by unit charge
-//		Resfab.minus(Xfab,box,box,0,1,1);	   // Substract current ne
-//		Resfab.plus(laplfab,box,box,0,1,1);	   // Add the phiV laplacian --> Done with phiV residuals
+	   Resfab.copy(bgchargfab,box,0,box,1,1);	// Copy bg charge term / q_E into res for phiV
+		Resfab.minus(Ufab,box,box,0,1,1);	   // Substract current ne
+		Resfab.plus(laplfab,box,box,0,1,1);	   // Add the phiV laplacian --> Done with phiV residuals
    }
 
 	showMF("pnp",pnp_res,"pnp_res",level);
@@ -358,14 +335,14 @@ void PeleLM::ef_bg_chrg(Real dt,
 	   const FArrayBox& rfab = get_new_data(RhoYdot_Type)[mfi];
 	   FArrayBox& bgchrgfab = pnp_bgchrg[mfi];
 		ef_calc_chargedist_prov(box.loVect(), box.hiVect(),
-				                  rhoYoldfab.dataPtr(0),    ARLIM(rhoYoldfab.loVect()), ARLIM(rhoYoldfab.hiVect()), 
+				                  rhoYoldfab.dataPtr(first_spec), ARLIM(rhoYoldfab.loVect()), ARLIM(rhoYoldfab.hiVect()), 
 										afab.dataPtr(first_spec), ARLIM(afab.loVect()),       ARLIM(afab.hiVect()),
 										dnfab.dataPtr(0),         ARLIM(dnfab.loVect()),      ARLIM(dnfab.hiVect()),
 										dnp1fab.dataPtr(0),       ARLIM(dnp1fab.loVect()),    ARLIM(dnp1fab.hiVect()),
 										dhatfab.dataPtr(0),       ARLIM(dhatfab.loVect()),    ARLIM(dhatfab.hiVect()),
 										rfab.dataPtr(0),          ARLIM(rfab.loVect()),       ARLIM(rfab.hiVect()),
 										bgchrgfab.dataPtr(),		  ARLIM(bgchrgfab.loVect()),  ARLIM(bgchrgfab.hiVect()),
-										dt);
+										&dt);
    }
 }
 
@@ -393,21 +370,19 @@ void PeleLM::compute_ne_diffusion_term(Real dt,
 													MultiFab* De_ec[BL_SPACEDIM],
 													MultiFab& diff_ne) {
 
-// Get alias to ne in pnp_X
-//	MultiFab nE_alias(pnp_X,amrex::make_alias,0,1);
+// Get alias to ne in pnp_U
+//	MultiFab nE_alias(pnp_U,amrex::make_alias,0,1);
 	const Real time  = state[State_Type].curTime();	// current time
 	MultiFab&  S = get_new_data(State_Type);
 	FillPatchIterator nEfpi(*this,S,1,time,State_Type,nE,1);
 	MultiFab& nEmf = nEfpi.get_mf();
 	MultiFab::Copy(S,nEmf,0,nE,1,1);
-   MultiFab nE_alias(S,amrex::make_alias,nE,1);
 
 // Set-up Lapl operator
    LPInfo info;
    info.setAgglomeration(1);
    info.setConsolidation(1);
    info.setMetricTerm(false);
-
    MLABecLaplacian ne_LAPL({geom}, {grids}, {dmap}, info);
    ne_LAPL.setMaxOrder(ef_PoissonMaxOrder);
 	  
@@ -416,29 +391,34 @@ void PeleLM::compute_ne_diffusion_term(Real dt,
    std::array<LinOpBCType,AMREX_SPACEDIM> mlmg_hibc;
 	ef_set_neBC(mlmg_lobc, mlmg_hibc);
 	ne_LAPL.setDomainBC(mlmg_lobc, mlmg_hibc);
-	ne_LAPL.setLevelBC(0, &nE_alias);
+	{
+      MultiFab nE_alias(S,amrex::make_alias,nE,1);
+	   ne_LAPL.setLevelBC(0, &nE_alias);
+	}
 
 // Coeff's	
    ne_LAPL.setScalars(0.0, 1.0); 
-	MultiFab acoef(grids, dmap, 1, 0);
-	acoef.setVal(0.0);	
-	ne_LAPL.setACoeffs(0, acoef);
 	std::array<const MultiFab*,AMREX_SPACEDIM> bcoeffs{D_DECL(De_ec[0],De_ec[1],De_ec[2])};
 	ne_LAPL.setBCoeffs(0, bcoeffs);
 
-	const Real cur_time  = state[State_Type].curTime();	// current time
+// Get divergence using apply function	
+   MultiFab nE_alias(pnp_U,amrex::make_alias,0,1);
 	FluxBoxes fluxb  (this, 1, 0);								// Flux box ...
 	MultiFab **flux    =   fluxb.get();							// ... associated flux MultiFab
 	MLMG mlmg(ne_LAPL);
-	std::array<MultiFab*,AMREX_SPACEDIM> fp{D_DECL(flux[0],flux[1],flux[2])};
-	mlmg.getFluxes({fp},{&nE_alias});
+	mlmg.apply({&diff_ne},{&nE_alias});
+
+	diff_ne.mult(-1.0);
+
+//	std::array<MultiFab*,AMREX_SPACEDIM> fp{D_DECL(flux[0],flux[1],flux[2])};
+//	mlmg.getFluxes({fp},{&nEU_alias});
 
 // Rescale fluxes to get right stuff regardless of cartesian or r-Z
-   for (int d = 0; d < BL_SPACEDIM; ++d) 
-      flux[d]->mult(1.0/(dt*geom.CellSize()[d]));   
+//   for (int d = 0; d < BL_SPACEDIM; ++d) 
+//      flux[d]->mult(1.0/(geom.CellSize()[d]));   
 
 // Get flux divergence, scaled by -1
-	flux_divergence(diff_ne,0,flux,0,1,-1);
+//	flux_divergence(diff_ne,0,flux,0,1,-1);
 
 }
 
@@ -446,21 +426,22 @@ void PeleLM::compute_ne_convection_term(MultiFab& conv_ne) {
 
 	conv_ne.setVal(0.0);
 
+// Build u_eff : u_mac + Ke*grad(\phi) at faces	
+   for (int d = 0; d < BL_SPACEDIM; ++d) 
+   	pnp_Ueff[d].copy(u_mac[d]);
+
 }
 
 void PeleLM::compute_phiV_laplacian_term(Real dt,
 													  MultiFab& lapl_phiV) {
 
 
-// TODO: most of these operator should be done once at the beginning of the PNP solve	
-// Get alias to ne in pnp_X
-//	MultiFab phiV_alias(pnp_X,amrex::make_alias,1,1);
+// Get alias to ne in pnp_U
 	const Real time  = state[State_Type].curTime();	// current time
 	MultiFab&  S = get_new_data(State_Type);
 	FillPatchIterator PhiVfpi(*this,S,1,time,State_Type,PhiV,1);
 	MultiFab& PhiVmf = PhiVfpi.get_mf();
 	MultiFab::Copy(S,PhiVmf,0,PhiV,1,1);
-   MultiFab PhiV_alias(S,amrex::make_alias,PhiV,1);
 
 // Get a bunch of stuff necesary to get the fluxes
 	FluxBoxes fluxb  (this, 1, 0);								// Flux box ...
@@ -471,7 +452,6 @@ void PeleLM::compute_phiV_laplacian_term(Real dt,
    info.setAgglomeration(1);
    info.setConsolidation(1);
    info.setMetricTerm(false);
-
    MLPoisson phiV_poisson({geom}, {grids}, {dmap}, info);
    phiV_poisson.setMaxOrder(ef_PoissonMaxOrder);
 
@@ -480,19 +460,25 @@ void PeleLM::compute_phiV_laplacian_term(Real dt,
    std::array<LinOpBCType,AMREX_SPACEDIM> mlmg_hibc;
 	ef_set_PoissonBC(mlmg_lobc, mlmg_hibc);
    phiV_poisson.setDomainBC(mlmg_lobc, mlmg_hibc);
-   phiV_poisson.setLevelBC(0, &PhiV_alias);
+	{
+      MultiFab PhiV_alias(S,amrex::make_alias,PhiV,1);
+      phiV_poisson.setLevelBC(0, &PhiV_alias);
+	}
 
-// LinearSolver to get fluxes
+// LinearSolver to get divergence
 	MLMG mlmg(phiV_poisson);
-	std::array<MultiFab*,AMREX_SPACEDIM> fp{D_DECL(flux[0],flux[1],flux[2])};
-	mlmg.getFluxes({fp},{&PhiV_alias});
+	MultiFab PhiV_alias(pnp_U,amrex::make_alias,1,1);
+	mlmg.apply({&lapl_phiV},{&PhiV_alias});
+
+//	std::array<MultiFab*,AMREX_SPACEDIM> fp{D_DECL(flux[0],flux[1],flux[2])};
+//	mlmg.getFluxes({fp},{&PhiV_alias});
 
 // Rescale fluxes to get right stuff regardless of cartesian or r-Z
-   for (int d = 0; d < BL_SPACEDIM; ++d) 
-       flux[d]->mult(1.0/(dt*geom.CellSize()[d]));   
+//   for (int d = 0; d < BL_SPACEDIM; ++d) 
+//       flux[d]->mult(1.0/(dt*geom.CellSize()[d]));   
 
 // Get flux divergence, scaled by -1
-	flux_divergence(lapl_phiV,0,flux,0,1,-1);
+//	flux_divergence(lapl_phiV,0,flux,0,1,-1);
 
 }
 
@@ -548,6 +534,63 @@ void PeleLM::ef_set_neBC(std::array<LinOpBCType,AMREX_SPACEDIM>& diff_lobc,
             else
             {
                 diff_hibc[idim] = LinOpBCType::bogus;
+            }
+        }
+    }
+}
+
+// Setup BC conditions for linear Poisson solve on PhiV. Directly copied from the diffusion one ...
+void PeleLM::ef_set_PoissonBC(std::array<LinOpBCType,AMREX_SPACEDIM>& mlmg_lobc,
+                              std::array<LinOpBCType,AMREX_SPACEDIM>& mlmg_hibc) {
+
+    const BCRec& bc = get_desc_lst()[State_Type].getBC(PhiV);
+
+    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
+    {
+        if (Geometry::isPeriodic(idim))
+        {
+            mlmg_lobc[idim] = mlmg_hibc[idim] = LinOpBCType::Periodic;
+        }
+        else
+        {
+            int pbc = bc.lo(idim);
+            if (pbc == EXT_DIR)
+            {
+                mlmg_lobc[idim] = LinOpBCType::Dirichlet;
+            }
+            else if (pbc == FOEXTRAP      ||
+                     pbc == HOEXTRAP      || 
+                     pbc == REFLECT_EVEN)
+            {
+                mlmg_lobc[idim] = LinOpBCType::Neumann;
+            }
+            else if (pbc == REFLECT_ODD)
+            {
+                mlmg_lobc[idim] = LinOpBCType::reflect_odd;
+            }
+            else
+            {
+                mlmg_lobc[idim] = LinOpBCType::bogus;
+            }
+
+            pbc = bc.hi(idim);
+            if (pbc == EXT_DIR)
+            {
+                mlmg_hibc[idim] = LinOpBCType::Dirichlet;
+            }
+            else if (pbc == FOEXTRAP      ||
+                     pbc == HOEXTRAP      || 
+                     pbc == REFLECT_EVEN)
+            {
+                mlmg_hibc[idim] = LinOpBCType::Neumann;
+				} 
+            else if (pbc == REFLECT_ODD)
+            {
+                mlmg_hibc[idim] = LinOpBCType::reflect_odd;
+            }
+            else
+            {
+                mlmg_hibc[idim] = LinOpBCType::bogus;
             }
         }
     }
