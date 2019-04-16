@@ -197,6 +197,8 @@ protected:
 
   virtual void sum_integrated_quantities () override;
 
+  virtual void compute_fctCount () override;
+
   virtual void scalar_advection_update (amrex::Real dt,
                                         int  first_scalar,
                                         int  last_scalar) override;

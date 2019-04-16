@@ -2446,9 +2446,13 @@ PeleLM::post_init (Real stop_time)
         MultiFab Forcing_tmp(S_new.boxArray(),S_new.DistributionMap(),nspecies+1,0);
         Forcing_tmp.setVal(0);
 
+	// evaluate_fc == 1 the first time
         getLevel(k).advance_chemistry(S_new,S_tmp,dt_save[k]/2.0,Forcing_tmp,0);
       }
     }
+    evaluate_fc = 0;
+    reactor_close();
+    reactor_init(&cvode_iE,&ncells_packing);
     //
     // Recompute the velocity to obey constraint with chemistry and
     // divqrad and then average that down.
@@ -2556,8 +2560,6 @@ PeleLM::post_init (Real stop_time)
     }
   } // end divu_iters
 
-  evaluate_fc = 0;
-
     //
     // Initialize the pressure by iterating the initial timestep.
     //
@@ -2576,6 +2578,39 @@ PeleLM::post_init (Real stop_time)
     ParallelDescriptor::ReduceRealMax(run_time,IOProc);
 
     amrex::Print() << "PeleLM::post_init(): lev: " << level << ", time: " << run_time << '\n';
+  }
+}
+
+void
+PeleLM::compute_fctCount ()
+{
+  if (ncells_packing > 1) {
+      evaluate_fc = 1;
+      const int finest_level = parent->finestLevel();
+      const Real time        = state[State_Type].curTime();
+      // ReInitialize with good number of cells to pack
+      reactor_close();
+      int ncells_tmp         = 1;
+      reactor_init(&cvode_iE,&ncells_tmp);
+      // compute dt
+      Real prev_time = state[State_Type].prevTime();
+      Real dt = time - prev_time;
+      amrex::Print() << "INFO= " << time 
+    	     << " Reevaluating FctCount with " << dt << '\n';
+      for (int lev = 0; lev <= finest_level; lev++)
+      {
+          MultiFab& S_new = getLevel(lev).get_new_data(State_Type);
+
+          MultiFab S_tmp(S_new.boxArray(),S_new.DistributionMap(),S_new.nComp(),0);
+
+          MultiFab Forcing_tmp(S_new.boxArray(),S_new.DistributionMap(),nspecies+1,0);
+          Forcing_tmp.setVal(0);
+
+          getLevel(lev).advance_chemistry(S_new,S_tmp,dt,Forcing_tmp,0);
+      }
+      evaluate_fc = 0;
+      reactor_close();
+      reactor_init(&cvode_iE,&ncells_packing);
   }
 }
 
@@ -2784,6 +2819,7 @@ PeleLM::sum_integrated_quantities ()
       amrex::Print() << "TIME= " << time 
 		     << " min,max sum RhoYdot = "
 		     << min_sum << ", " << max_sum << '\n';
+
     }       
     std::cout.precision(old_prec);
   }
@@ -5525,10 +5561,10 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       const auto fcl    = fc.view(lo);
       const auto frcing = frc.view(lo);
 
-      if (verbose > 2) 
-        amrex::Print() << "     *** advance_chemistry: New Fab, evaluate fc ?? " << evaluate_fc << '\n';
+      if (verbose ) 
+        //amrex::Print() << "     *** advance_chemistry: New Fab, evaluate fc ?? " << evaluate_fc << '\n';
 
-      if (evaluate_fc) {
+      if ((evaluate_fc) || (ncells_packing < 2)) {
           /* only one cell packed for now */
           double tmp_vect[(nspecies+1)];
           double tmp_src_vect[nspecies];
@@ -5549,12 +5585,6 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 				  tmp_vect_energy, tmp_src_vect_energy,
 				  &pressure, &dt_incr, &time_init, &reInit);
 		      dt_incr = dt;
-		      // Find the tag bounds
-		      //if (fcl(i,j,k) < min_tag) {
-		      //    min_tag = fcl(i,j,k);
-		      //} else if (fcl(i,j,k) > max_tag ) {
-		      //    max_tag = fcl(i,j,k);
-		      //}
 		      for (int sp=0;sp<nspecies; sp++){
 	                  rhoY(i,j,k,sp) = tmp_vect[nc*(nspecies+1) + sp] * 1.e+3;
 		      }
@@ -5575,6 +5605,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 
           int nc = 0;
 	  int num_cell_cvode_int = 0;
+	  int fcl_grp;
 	  for         (int tag = 0; tag < 3; ++tag) {
               nc = 0;
               for         (int k = 0; k < len.z; ++k) {
@@ -5598,7 +5629,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 			      num_cell_cvode_int = num_cell_cvode_int + 1;
 			  }
 			  if (nc == ncells_packing) {
-                              react(tmp_vect, tmp_src_vect,
+                              fcl_grp = react(tmp_vect, tmp_src_vect,
 				  tmp_vect_energy, tmp_src_vect_energy,
 				  &pressure, &dt_incr, &time_init, &reInit);
 		              dt_incr = dt;
@@ -5609,14 +5640,17 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 				  }
 				  rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies+2) = tmp_vect[l*(nspecies+1) + nspecies];
 				  rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies)   = tmp_vect_energy[l] * 1.e-01;
+				  //fcl(indx_i[l],indx_j[l],indx_k[l]) = fcl_grp;
 			      }
 			  }
 		      }
 		  }
 	      }
               if ((nc != ncells_packing)&&(nc != 0)) {
-                  printf(" WARNING !! Not enough cells (%d) in tag %d to fill %d \n", nc, tag, ncells_packing);
-		  printf("            ... filling with dummy state \n ");
+		  if (verbose > 1) {
+                      printf(" WARNING !! Not enough cells (%d) in tag %d to fill %d \n", nc, tag, ncells_packing);
+		      printf("            ... filling with dummy state \n ");
+		  }
 		  int nc_tmp = nc;
 		  for (int i = nc; i < ncells_packing; ++i) {
                       for (int sp=0;sp<nspecies; sp++){
@@ -5627,7 +5661,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 		      tmp_vect_energy[i]                  = rhoY(0,0,0,nspecies) * 10.0;
 		      tmp_src_vect_energy[i]              = 0.0;
 		  }
-		  react(tmp_vect, tmp_src_vect, tmp_vect_energy, tmp_src_vect_energy, 
+		  fcl_grp = react(tmp_vect, tmp_src_vect, tmp_vect_energy, tmp_src_vect_energy, 
 				  &pressure, &dt_incr, &time_init, &reInit);
 		  dt_incr = dt;
 		  nc = 0;
@@ -5637,6 +5671,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 		      }
 		      rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies+2) = tmp_vect[l*(nspecies+1) + nspecies];
 		      rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies)   = tmp_vect_energy[l] * 1.e-01;
+		      //fcl(indx_i[l],indx_j[l],indx_k[l]) = fcl_grp;
 		  }
 	      }
 	  }
@@ -5649,9 +5684,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
     }
 
     // Will not work with MPI ...
-    if (evaluate_fc) {
-	  //min_tag = fcnCntTemp.min(0);
-          //max_tag = fcnCntTemp.max(0);
+    if ((evaluate_fc) && (ncells_packing > 1)) {
 	  tag_bds[0] = std::min(min_tag, (int) fcnCntTemp.min(0) - 1);
 	  tag_bds[3] = std::max(max_tag, (int) fcnCntTemp.max(0) + 1);
 	  tag_bds[2] = tag_bds[0] + (tag_bds[3] - tag_bds[0])/3;
@@ -5689,7 +5722,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       diagTemp.clear();
     }
 
-    if (evaluate_fc) {
+    if ((evaluate_fc) || (ncells_packing < 2)) {
         //MultiFab& FC = get_new_data(FuncCount_Type);
         FC.copy(fcnCntTemp,0,0,1,0,std::min(ngrow,FC.nGrow()));
     }

@@ -445,8 +445,15 @@ PeleLM::variableSetUp ()
   amrex::Print() << " Initialization of network, reactor and transport \n";
   init_network();
 #ifdef AMREX_USE_SUNDIALS_3x4x
-  reactor_init(&cvode_iE,&ncells_packing);
+#ifdef _OPENMP
+#pragma omp parallel
+#endif  
+  int ncells_tmp = 1;
+  reactor_init(&cvode_iE,&ncells_tmp);
 #else
+#ifdef _OPENMP
+#pragma omp parallel
+#endif  
   reactor_init(&cvode_iE);
 #endif
   init_transport(use_tranlib);
