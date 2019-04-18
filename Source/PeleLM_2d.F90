@@ -109,7 +109,7 @@ contains
          divu(i,j) = ( divu(i,j)/(cpmix*T(i,j)) + tmp*mmw ) * rhoInv
         enddo
       enddo
-      call flush
+      !call flush
 
   end subroutine calc_divu_fortran
 
@@ -803,7 +803,7 @@ contains
 
          end do
       end do
-      call flush
+      !call flush
       
   end subroutine pphys_RRATERHOY
 
