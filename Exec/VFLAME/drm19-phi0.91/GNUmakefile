@@ -8,7 +8,7 @@
 #
 
 DIM             = 2
-COMP            = gnu
+COMP            = pgi
 DEBUG           = FALSE
 USE_MPI         = TRUE
 USE_OMP         = FALSE
@@ -16,6 +16,7 @@ PRECISION       = DOUBLE
 VERBOSE         = FALSE
 
 USE_CUDA        = FALSE
+USE_CUDA_CVODE  = FALSE
 
 #DEFINES+=-DALWAYS_NEW_J
 
