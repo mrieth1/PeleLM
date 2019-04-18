@@ -4,6 +4,7 @@
 // "RhoYchemProd_Type" means -omega_l/rho, i.e., the mass rate of decrease of species l due
 //             to kinetics divided by rho
 //
+//
 #include <unistd.h>
 
 #include <iostream>
@@ -40,7 +41,10 @@
 
 #include <AMReX_buildInfo.H>
 
-#ifdef AMREX_USE_SUNDIALS_3x4x
+#if defined(AMREX_USE_SUNDIALS_3x4x) && defined(AMREX_USE_CUDA)
+#include <actual_Creactor_GPU.h>
+#include <actual_Creactor_unit.h>
+#elif defined(AMREX_USE_SUNDIALS_3x4x) && !defined(AMREX_USE_CUDA)
 #include <actual_Creactor.h>
 #endif
 
@@ -657,7 +661,7 @@ PeleLM::Initialize ()
   PeleLM::sdc_iterMAX               = 1;
   PeleLM::num_mac_sync_iter         = 1;
   PeleLM::iter_debug                = 0;
-  PeleLM::evaluate_fc               = 1;
+  PeleLM::evaluate_fc               = 0;
   PeleLM::min_tag                   = 100000000;
   PeleLM::max_tag                   = -1;
   PeleLM::mHtoTiterMAX              = 20;
@@ -2428,6 +2432,7 @@ PeleLM::post_init (Real stop_time)
 
   amrex::Print() << "doing num_divu_iters = " << num_divu_iters << '\n';
 
+  evaluate_fc = 1;
   for (int iter = 0; iter < init_divu_iter; ++iter)
   {
     //
@@ -2451,8 +2456,6 @@ PeleLM::post_init (Real stop_time)
       }
     }
     evaluate_fc = 0;
-    reactor_close();
-    reactor_init(&cvode_iE,&ncells_packing);
     //
     // Recompute the velocity to obey constraint with chemistry and
     // divqrad and then average that down.
@@ -2589,9 +2592,6 @@ PeleLM::compute_fctCount ()
       const int finest_level = parent->finestLevel();
       const Real time        = state[State_Type].curTime();
       // ReInitialize with good number of cells to pack
-      reactor_close();
-      int ncells_tmp         = 1;
-      reactor_init(&cvode_iE,&ncells_tmp);
       // compute dt
       Real prev_time = state[State_Type].prevTime();
       Real dt = time - prev_time;
@@ -2609,8 +2609,6 @@ PeleLM::compute_fctCount ()
           getLevel(lev).advance_chemistry(S_new,S_tmp,dt,Forcing_tmp,0);
       }
       evaluate_fc = 0;
-      reactor_close();
-      reactor_init(&cvode_iE,&ncells_packing);
   }
 }
 
@@ -5562,7 +5560,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       const auto frcing = frc.view(lo);
 
       if (verbose ) 
-        //amrex::Print() << "     *** advance_chemistry: New Fab, evaluate fc ?? " << evaluate_fc << '\n';
+        amrex::Print() << "     *** New Fab, evaluate fc ?? " << evaluate_fc << '\n';
 
       if ((evaluate_fc) || (ncells_packing < 2)) {
           /* only one cell packed for now */
@@ -5581,15 +5579,31 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 		      tmp_vect[nc*(nspecies+1) + nspecies] = rhoY(i,j,k,nspecies+2);
 		      tmp_vect_energy[nc]                  = rhoY(i,j,k,nspecies) * 10.0;
 		      tmp_src_vect_energy[nc]              = frcing(i,j,k,nspecies) * 10.0;
+#if defined(AMREX_USE_SUNDIALS_3x4x) && defined(AMREX_USE_CUDA)
+		      fcl(i,j,k) = react_unit(tmp_vect, tmp_src_vect,
+				  tmp_vect_energy, tmp_src_vect_energy,
+				  &pressure, &dt_incr, &time_init);
+#else
 		      fcl(i,j,k) = react(tmp_vect, tmp_src_vect,
 				  tmp_vect_energy, tmp_src_vect_energy,
 				  &pressure, &dt_incr, &time_init, &reInit);
+#endif
 		      dt_incr = dt;
 		      for (int sp=0;sp<nspecies; sp++){
 	                  rhoY(i,j,k,sp) = tmp_vect[nc*(nspecies+1) + sp] * 1.e+3;
+                          if (rhoY(i,j,k,sp) != rhoY(i,j,k,sp)) {
+                              amrex::Abort("NaNs !! ");
+                          }
 		      }
 		      rhoY(i,j,k,nspecies+2) = tmp_vect[nc*(nspecies+1) + nspecies]; 
+                      if (rhoY(i,j,k,nspecies+2) != rhoY(i,j,k,nspecies+2)) {
+                          amrex::Abort("NaNs !! ");
+                      }
 	              rhoY(i,j,k,nspecies) = tmp_vect_energy[nc] * 1.e-01;
+                      if (rhoY(i,j,k,nspecies) != (rhoY(i,j,k,nspecies)) {
+                          amrex::Abort("NaNs !! ");
+                      }
+                      //amrex::Print() << "     ***     (IJK) Temperature = (" << i<<" "<<j<<" "<<k<<") "<< tmp_vect[nspecies]<< '\n';
 	          }
               }
           }
@@ -5607,6 +5621,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 	  int num_cell_cvode_int = 0;
 	  int fcl_grp;
 	  for         (int tag = 0; tag < 3; ++tag) {
+              amrex::Print() << "     ***     Take care of tag " << tag << " " << tag_bds[tag] << " "<< tag_bds[tag+1] <<'\n';
               nc = 0;
               for         (int k = 0; k < len.z; ++k) {
                   for         (int j = 0; j < len.y; ++j) {
@@ -5637,6 +5652,9 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 			      for (int l = 0; l < ncells_packing ; ++l){
                                   for (int sp=0;sp<nspecies; sp++){
                                       rhoY(indx_i[l],indx_j[l],indx_k[l],sp) = tmp_vect[l*(nspecies+1) + sp]* 1.e+3;
+                                      if (rhoY(indx_i[l],indx_j[l],indx_k[l],sp) != rhoY(indx_i[l],indx_j[l],indx_k[l],sp)) {
+                                          amrex::Abort("NaNs !! ");
+                                      }
 				  }
 				  rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies+2) = tmp_vect[l*(nspecies+1) + nspecies];
 				  rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies)   = tmp_vect_energy[l] * 1.e-01;
@@ -5646,7 +5664,8 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 		      }
 		  }
 	      }
-              if ((nc != ncells_packing)&&(nc != 0)) {
+              //if ((nc != ncells_packing)&&(nc != 0)) {
+              if ((nc != 0) {
 		  if (verbose > 1) {
                       printf(" WARNING !! Not enough cells (%d) in tag %d to fill %d \n", nc, tag, ncells_packing);
 		      printf("            ... filling with dummy state \n ");
@@ -5668,12 +5687,17 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 		  for (int l = 0; l < nc_tmp ; ++l){
                       for (int sp=0;sp<nspecies; sp++){
                           rhoY(indx_i[l],indx_j[l],indx_k[l],sp) = tmp_vect[l*(nspecies+1) + sp]* 1.e+3;
+                          if (rhoY(indx_i[l],indx_j[l],indx_k[l],sp) != rhoY(indx_i[l],indx_j[l],indx_k[l],sp)) {
+                              amrex::Abort("NaNs !! ");
+                          }
 		      }
 		      rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies+2) = tmp_vect[l*(nspecies+1) + nspecies];
 		      rhoY(indx_i[l],indx_j[l],indx_k[l],nspecies)   = tmp_vect_energy[l] * 1.e-01;
 		      //fcl(indx_i[l],indx_j[l],indx_k[l]) = fcl_grp;
 		  }
-	      }
+	      } else {
+                  amrex::Print() << "     ***     -- ncells_packing, nc (should be 0) =" << ncells_packing << " "<< nc <<'\n';
+              }
 	  }
 	  if (num_cell_cvode_int != num_cell_in_FAB ) {
 	      amrex::Print() << num_cell_cvode_int << " ? " << num_cell_in_FAB << std::endl;
