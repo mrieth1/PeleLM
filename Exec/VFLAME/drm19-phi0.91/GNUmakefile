@@ -8,7 +8,7 @@
 #
 
 DIM             = 2
-COMP            = pgi
+COMP            = gnu
 DEBUG           = FALSE
 USE_MPI         = TRUE
 USE_OMP         = FALSE
@@ -29,7 +29,7 @@ USE_SUNDIALS_3x4x = TRUE
 USE_KLU = FALSE
 ifeq ($(USE_KLU), TRUE)
     DEFINES  += -DUSE_KLU
-    include Make.CVODE
+    include Make.CVODEKLU
 endif
 #######################
 
