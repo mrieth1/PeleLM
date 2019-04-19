@@ -45,7 +45,7 @@
 #include <actual_Creactor_GPU.h>
 #include <actual_Creactor_unit.h>
 #elif defined(AMREX_USE_SUNDIALS_3x4x) && !defined(AMREX_USE_CUDA)
-#include <actual_Creactor.h>
+#include <CPU/actual_Creactor.h>
 #endif
 
 using namespace amrex;
@@ -5600,7 +5600,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
                           amrex::Abort("NaNs !! ");
                       }
 	              rhoY(i,j,k,nspecies) = tmp_vect_energy[nc] * 1.e-01;
-                      if (rhoY(i,j,k,nspecies) != (rhoY(i,j,k,nspecies)) {
+                      if (rhoY(i,j,k,nspecies) != rhoY(i,j,k,nspecies)) {
                           amrex::Abort("NaNs !! ");
                       }
                       //amrex::Print() << "     ***     (IJK) Temperature = (" << i<<" "<<j<<" "<<k<<") "<< tmp_vect[nspecies]<< '\n';
@@ -5665,7 +5665,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 		  }
 	      }
               //if ((nc != ncells_packing)&&(nc != 0)) {
-              if ((nc != 0) {
+              if (nc != 0) {
 		  if (verbose > 1) {
                       printf(" WARNING !! Not enough cells (%d) in tag %d to fill %d \n", nc, tag, ncells_packing);
 		      printf("            ... filling with dummy state \n ");

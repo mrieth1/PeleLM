@@ -43,7 +43,7 @@
 #include <actual_Creactor_GPU.h>
 #include <actual_Creactor_unit.h>
 #elif defined(AMREX_USE_SUNDIALS_3x4x) && !defined(AMREX_USE_CUDA)
-#include <actual_Creactor.h>
+#include <CPU/actual_Creactor.h>
 #endif
 
 using namespace amrex;
