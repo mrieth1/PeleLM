@@ -1,0 +1,19 @@
+#!/bin/bash
+# Begin LSF Directives
+#BSUB -P CSC308
+#BSUB -W 01:00
+#BSUB -nnodes 1
+#BSUB -alloc_flags gpumps
+#BSUB -J MySweetSim
+#BSUB -o MySweetSim.%J
+#BSUB -e MySweetSim.%J
+
+#module load pgi/18.4
+#module load cuda
+module list
+set -x
+ 
+date
+
+##jsrun -n 1 -c 4 -a 4 ./PeleLM2d.gnu.MPI.ex inputs.3d
+jsrun -n 1 -c 1 -a 1 -g 1 ./PeleLM2d.pgi.MPI.CUDA.ex inputs.3d
