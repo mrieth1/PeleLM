@@ -75,6 +75,8 @@ contains
          a = 5.0d0
       else if (name .eq. 'CH3OCH3') then
          a = 3.0d0
+      else if (name .eq. 'NC12H26') then
+         a = 18.5d0
       else
          call bl_abort('setupbc: Unknown fuel type')
       end if

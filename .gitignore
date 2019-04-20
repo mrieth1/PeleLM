@@ -1,6 +1,7 @@
 # Temporary files
 *~
 *.swp
+*.csv
 
 # BoxLib build directories
 d/
@@ -9,19 +10,27 @@ f/
 extern.f90
 AMReX_buildInfo.cpp
 *.dSYM
+*_bu
+out_*
+*_test
+*_new
 
 # Executable
 *.ex
-
+*.pyc
 
 # Run output
 *.p3d
 plt*
 *plt*old*
 Backtrace*
+grdlog
 chk*
 grdlog
 *_bu
 
 # OSX files
 .DS_Store
+
+# script
+*.py

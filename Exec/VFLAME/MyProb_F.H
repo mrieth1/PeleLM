@@ -15,6 +15,7 @@
 #include <infl_frc.H>
 #endif
 
+#define BL_PROB_PREMIXED_OSCILLATOR 'premixed_oscillator'
 #define BL_PROB_PREMIXED_FIXED_INFLOW 'premixed_fixed_inlet'
 #define BL_PROB_PREMIXED_CONTROLLED_INFLOW 'premixed_controlled_inlet'
 #define BL_PROB_PREMIXED_FIXED_INFLOW_FORCED 'premixed_fixed_inlet_forced'
@@ -40,3 +41,6 @@
 #define BL_VOLUME   6
 #define BL_PIPEEND  7
 
+#define BL_PO_INLET 1
+#define BL_PO_WIRE  2
+#define BL_PO_WALL  3

@@ -67,9 +67,11 @@ contains
      		        max_temp_lev, max_vort_lev, max_trac_lev, &
                        traceSpecVal,phi_in,T_in,  &
                        turb_scale, V_in, V_co, &
-                       standoff, pertmag, nchemdiag, splitx, xfrontw, &
+                       standoff, pertmag, pertmode, nchemdiag, splitx, xfrontw, &
                        splity, yfrontw, blobx, bloby, blobz, blobr, &
-                       blobT, Tfrontw, stTh, fuel_N2_vol_percent
+                       blobT, Tfrontw, stTh, fuel_N2_vol_percent, &
+                       flameAngle, jetRad, wireRad, wireDelta, wireAmp, &
+                       wireFreq, wireTemp, wireVel, initPertScale, intmYH, intmYO, intmYOH
       namelist /heattransin/ pamb, dpdt_factor, closed_chamber
 #if defined(BL_DO_FLCT)
       integer nCompFile
@@ -625,6 +627,8 @@ contains
     integer b(SDIM)
     integer num_zones_defined, len
     data  b / 1, 1 /
+
+    REAL_T sumY
       
     Patm = pamb / pphys_getP1atm_MKS()
     num_zones_defined = 0
@@ -691,10 +695,8 @@ contains
       do n = 1,Nspec
         Xt(n) = 0.d0
       end do 
-
       Xt(bathID) = fuel_N2_vol_percent*1.d-2
       Xt(fuelID) = 1.d0 - Xt(bathID)            
-
       CALL CKXTY (Xt, Yt)
 
       do n=1,Nspec
@@ -719,6 +721,71 @@ contains
       T_bc(airZone) = T_in
       u_bc(airZone) = 0.d0
       v_bc(airZone) = V_in
+
+      ! ANNE
+      else if (probtype(1:len).eq.BL_PROB_PREMIXED_OSCILLATOR) then
+
+!c     premixed oscillator
+!c     INLET
+         zone = BL_PO_INLET
+         call set_Y_from_Phi(phi_in,Yt)
+         do n=1,Nspec
+            Y_bc(n-1,zone) = Yt(n)
+         end do
+         T_bc(zone) = T_in
+         u_bc(zone) = zero
+         v_bc(zone) = V_in
+
+!c     WIRE
+         zone = BL_PO_WIRE
+         do n=1,Nspec
+            Y_bc(n-1,zone) = Yt(n)
+         end do
+!c     Add some intermediate species to the wire
+!c     should try to make sure it all adds up to 1...
+!c     --- H
+!c     default preNov2017 = 3.2d-4
+         n = 1
+         Y_bc(n-1,zone) = intmYH
+
+!c     --- O
+!c     default preNov2017 = 2.5d-3
+         n = 2
+         Y_bc(n-1,zone) = intmYO
+
+!c     --- OH
+!c     default preNov2017 = n/a
+         n = 3
+         Y_bc(n-1,zone) = intmYOH
+
+!c     --- Ar (force to zero, just for completeness)
+!         n = Nspec
+!         Y_bc(n-1,zone) = 0.d0
+
+!c     --- N2 (penultimate species)
+         sumY = zero
+!c     loop over all species apart from N2 and Ar, and calculate the sum
+         do n=1, Nspec-1
+            sumY = sumY + Y_bc(n-1,zone)
+         end do
+!c     now put the remainder into N2
+         n = Nspec
+         Y_bc(n-1,zone) = 1-sumY
+
+         T_bc(zone) = wireTemp
+         u_bc(zone) = zero
+         v_bc(zone) = wireVel
+
+!c     WALL
+         zone = BL_PO_WALL
+         do n=1,Nspec
+            Y_bc(n-1,zone) = Yt(n)
+         end do
+         T_bc(zone) = T_in
+         u_bc(zone) = zero
+         v_bc(zone) = zero
+
+         num_zones_defined = 3
 
     else if (probtype(1:len).eq.BL_PROB_IGNITION) then
 
@@ -783,6 +850,19 @@ contains
       else
         getZone = BL_FUELPIPE
       endif
+
+      else if (probtype(1:len).eq.BL_PROB_PREMIXED_OSCILLATOR) then
+         
+         if (abs(x) .ge. jetRad) then
+!c     overridden in bcfunction
+!c            if (abs(x-wirePos).ge.wireRad) then
+               getZone = BL_PO_INLET
+!c            else
+!c               getZone = BL_PO_WIRE
+!c            endif
+         else
+            getZone = BL_PO_WALL
+         endif
          
       else
          call bl_pd_abort()
@@ -809,6 +889,8 @@ contains
 
       integer n, zone, len
       REAL_T eta, xmid, etamax
+
+      REAL_T wirePos, alpha
 
       if (.not. bcinit) then
          call bl_abort('Need to initialize boundary condition function')
@@ -868,12 +950,47 @@ contains
             endif
             
          endif
+
+      else if (probtype(1:len).eq.BL_PROB_PREMIXED_OSCILLATOR) then
+
+!c     Override getzone for t-dep
+         wirePos = wireAmp*sin(two*Pi*wireFreq*time)
+         
+         if (abs(x).lt.jetRad) then
+!c     Use a hyperbolic tangent to smooth the wire and make it less discrete
+            alpha = 0.5d0*(1-tanh((abs(x-wirePos)-wireRad)/wireDelta))
+            rho = alpha*rho_bc(BL_PO_WIRE)+(1.d0-alpha)*rho_bc(BL_PO_INLET)
+            do n = 0, Nspec-1
+               Yl(n) = alpha*Y_bc(n,BL_PO_WIRE)+(1.d0-alpha)*Y_bc(n,BL_PO_INLET)
+            end do
+            T = alpha*T_bc(BL_PO_WIRE)+(1.d0-alpha)*T_bc(BL_PO_INLET)
+            h = alpha*h_bc(BL_PO_WIRE)+(1.d0-alpha)*h_bc(BL_PO_INLET)
+            if (getuv .eqv. .TRUE.) then
+               u = alpha*u_bc(BL_PO_WIRE)+(1.d0-alpha)*u_bc(BL_PO_INLET)
+               v = alpha*v_bc(BL_PO_WIRE)+(1.d0-alpha)*v_bc(BL_PO_INLET)
+            endif
+         else
+            zone = BL_PO_WALL
+            rho = rho_bc(zone)
+            do n = 0, Nspec-1
+               Yl(n) = Y_bc(n,zone)
+            end do
+            T = T_bc(zone)
+            h = h_bc(zone)
+            if (getuv .eqv. .TRUE.) then
+               u = u_bc(zone)
+               v = v_bc(zone)
+            endif
+         endif
+
+
       else
          write(6,*) 'No boundary condition for probtype = ', probtype(1:len)
          write(6,*) 'Available: '
          write(6,*) '            ',BL_PROB_PREMIXED_FIXED_INFLOW
          write(6,*) '            ',BL_PROB_PREMIXED_CONTROLLED_INFLOW
          write(6,*) '            ',BL_PROB_DIFFUSION
+         write(6,*) '            ',BL_PROB_PREMIXED_OSCILLATOR
          call bl_pd_abort(' ')
       endif
       
@@ -997,6 +1114,8 @@ contains
       REAL_T pert,Lx,eta,u,v,rho,T,h
       REAL_T sigma
 
+      REAL_T flameX, flameY, fDist, atfa, beta, pDist
+
       integer iO2,iCO2,iH2O,iCH3OCH3,len
       character*(maxspnml) name
 
@@ -1051,6 +1170,68 @@ contains
 
             end do
          end do
+
+      else if (probtype(1:len).eq.BL_PROB_PREMIXED_OSCILLATOR) then 
+
+         do j = lo(2), hi(2)
+            y = (float(j)+.5d0)*delta(2)+domnlo(2)
+            do i = lo(1), hi(1)
+               x = (float(i)+.5d0)*delta(1)+domnlo(1)
+
+!c     Hack out initial V, but put something at the inlet to get it going
+!c     Change this condition to .true. to get the V
+!c               if (j.eq.domnlo(2)) then
+               if (.true.) then 
+!c     This bit puts in an initial V with a perturbation
+                  atfa = 1.d0/atan(2.d0*Pi*flameAngle/180.d0)
+                  atfa = 1.d0/9.9d0
+                  beta = atfa/(1+atfa*atfa) * (y+atfa*abs(x))
+                  flameX = beta
+                  flameY = flameX/atfa
+                  fDist = sqrt( (abs(x)-flameX)**2 + (y-flameY)**2 )
+                  if (y.lt.flameY) then
+                     fDist = fDist*(-1.d0)
+                  endif
+                  
+                  pDist = sqrt(flameX**2+flameY**2)
+                  pert = 0.d0
+                  if (pertmag .gt. 0.d0) then
+                     Lx = domnhi(1) - domnlo(1)
+                     pert = pertmag*sin(2*Pi*float(pertmode)*pDist/Lx)
+                  endif
+                  
+                  y1 = (fDist - standoff - 0.5d0*delta(2) + pert)*100.d0
+                  y2 = (fDist - standoff + 0.5d0*delta(2) + pert)*100.d0
+               else
+!c     hack: just pull out fuel conditions from PMF file, 
+                  y1=-1.d10
+                  y2=y1+delta(2)
+               endif
+
+               call pmf(y1,y2,pmf_vals,nPMF)               
+               if (nPMF.ne.Nspec+3) then
+                  call bl_abort('INITDATA: n .ne. Nspec+3')
+               endif
+               
+               scal(i,j,Temp) = pmf_vals(1)
+               do n = 1,Nspec
+                  Xl(n) = pmf_vals(3+n)
+               end do 
+               
+               CALL CKXTY (Xl,Yl)
+               
+               do n = 1,Nspec
+                  scal(i,j,FirstSpec+n-1) = Yl(n)
+               end do
+
+               scal(i,j,Trac) = 0.d0
+
+               vel(i,j,1) = 0.d0
+               vel(i,j,2) = pmf_vals(2)*1.d-2
+
+            end do
+         end do
+
 
       else if ((probtype(1:len).eq.BL_PROB_IGNITION)) then
 

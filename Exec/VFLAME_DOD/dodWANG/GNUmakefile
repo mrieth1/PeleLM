@@ -1,4 +1,4 @@
-#TOP = ../../..
+#TOP = ../../../..
 #AMREX_HOME ?= ${TOP}/amrex
 #IAMR_HOME ?= ${TOP}/IAMR
 #PELELM_HOME ?= ${TOP}/PeleLM
@@ -15,25 +15,23 @@ USE_OMP         = FALSE
 PRECISION       = DOUBLE
 VERBOSE         = FALSE
 
-TINY_PROFILE = FALSE
-#USE_WBAR = TRUE
+USE_CUDA        = FALSE
+USE_CUDA_CVODE  = FALSE
 
-DEFINES+=-DALWAYS_NEW_J
+#DEFINES+=-DALWAYS_NEW_J
+
+# Enable flctin namelist
+USE_FLCTS       = TRUE
 
 #######################
-USE_SUNDIALS_3x4x = FALSE
+USE_SUNDIALS_3x4x = TRUE
 
 USE_KLU = FALSE
 ifeq ($(USE_KLU), TRUE)
-	DEFINES  += -DUSE_KLU
-	include Make.CVODE
+    DEFINES  += -DUSE_KLU
+    include Make.CVODE
 endif
 #######################
-
-# Enable flctin namelist
-#USE_FLCTS       = TRUE
-
-#USE_PARTICLES   = TRUE
 
 # Enable ht.velocity_plotfile option
 #USE_VELOCITY    = TRUE
@@ -46,8 +44,9 @@ endif
 #USE_TDEPFORCING = TRUE
 
 # Choose model (from list below), and pmf file
-Chemistry_Model = drm19
-fEXE_sources += drm19Soln_seed_0.50.f
+Chemistry_Model = dodecane_wang
+fEXE_sources += Ndod-PTphi_101325-425.0-1.0.f
+#fEXE_sources += wang_dodecane_phi_1000.f
 
 #Chemistry_Model = LIDRYER
 #fEXE_sources += LiDryer_040_01ATM.f
@@ -67,7 +66,7 @@ Reactions_dir := Fuego
 # This sets the transport directory in $(PELE_PHYSICS_HOME)/Transport
 Transport_dir := EGLib
 
-Blocs   := .
+Blocs   := .. .
 
 CEXE_sources +=
 F90EXE_sources += Prob_$(DIM)d.F90 Prob_F.F90

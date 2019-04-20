@@ -23,7 +23,7 @@
       save /prob1/, /prob2/, /prob3/, /prob4/, /prob5/
 
       integer refine_nozzle
-      REAL_T  infl_time_offset, omega
+      REAL_T  jet_x, jet_y, adv_vel, infl_time_offset, omega
       REAL_T refine_nozzle_x, refine_nozzle_y, refine_nozzle_z, blobx, bloby, blobz, blobr, blobT, Tfrontw, xcen
       common /myprob1/ refine_nozzle
       common /myprob2/ refine_nozzle_x, refine_nozzle_y, refine_nozzle_z, blobx, bloby, blobz, &
@@ -43,9 +43,11 @@
           V_co_new, T_stick, rho_stick, h_stick, fuel_N2_vol_percent
       save /myprob1/, /myprob2/, /myprob3/, /myprob4/, /myprob5/ 
 
+      integer pertmode
       REAL_T pertmag
       common /pert1/ pertmag
-      save /pert1/
+      common /pert2/ pertmode
+      save /pert1/, /pert2/
 
       REAL_T convVelInit
       common /inflow4/ convVelInit
@@ -58,3 +60,9 @@
       common /inflow2/probSizeFile, dxFile
       common /inflow3/dimFile
       save /inflow1/, /inflow2/, /inflow3/
+
+      REAL_T  flameAngle, jetRad, wireRad, wireDelta, wireAmp, wireFreq, wireTemp, &
+             wireVel, initPertScale, intmYH, intmYO, intmYOH
+      common /oscillator/ flameAngle, jetRad, wireRad, wireDelta, wireAmp, wireFreq, wireTemp, &
+             wireVel, initPertScale, intmYH, intmYO, intmYOH
+      save /oscillator/
