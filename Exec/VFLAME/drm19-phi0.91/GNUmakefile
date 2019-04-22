@@ -16,6 +16,7 @@ PRECISION       = DOUBLE
 VERBOSE         = FALSE
 
 USE_CUDA        = FALSE
+USE_CUDA_CVODE  = FALSE
 
 #DEFINES+=-DALWAYS_NEW_J
 
@@ -28,7 +29,7 @@ USE_SUNDIALS_3x4x = TRUE
 USE_KLU = FALSE
 ifeq ($(USE_KLU), TRUE)
     DEFINES  += -DUSE_KLU
-    include Make.CVODE
+    include Make.CVODEKLU
 endif
 #######################
 

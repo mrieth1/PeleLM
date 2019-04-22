@@ -1,0 +1,4 @@
+##INCLUDE_LOCATIONS += /sw/summit/cuda/9.2.148/include
+
+LIBRARIES += -lcusolver -lcublas -lcusparse
+###LIBRARIES += -rpath=/sw/summit/cuda/9.2.148/lib64

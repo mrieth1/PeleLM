@@ -39,9 +39,11 @@
 #include <PeleLM_F.H>
 #include <AMReX_Utility.H>
 #include <NS_error_F.H>
-#ifdef AMREX_USE_SUNDIALS_3x4x
-#include <actual_Creactor.h>
-#endif
+// GPU
+#include <actual_Creactor_GPU.h>
+#include <actual_Creactor_unit.h>
+// CPU
+//#include <actual_Creactor.h>
 
 using namespace amrex;
 
@@ -444,18 +446,17 @@ PeleLM::variableSetUp ()
   /* PelePhysics */
   amrex::Print() << " Initialization of network, reactor and transport \n";
   init_network();
-#ifdef AMREX_USE_SUNDIALS_3x4x
+
 #ifdef _OPENMP
 #pragma omp parallel
 #endif  
-  int ncells_tmp = 1;
-  reactor_init(&cvode_iE,&ncells_tmp);
-#else
+  reactor_init(&cvode_iE,&ncells_packing);
+// GPU
 #ifdef _OPENMP
 #pragma omp parallel
 #endif  
-  reactor_init(&cvode_iE);
-#endif
+  reactor_unit_init(&cvode_iE);
+
   init_transport(use_tranlib);
 
   BCRec bc;
