@@ -745,31 +745,31 @@ contains
 !c     should try to make sure it all adds up to 1...
 !c     --- H
 !c     default preNov2017 = 3.2d-4
-         n = 2
+         n = 1
          Y_bc(n-1,zone) = intmYH
 
 !c     --- O
 !c     default preNov2017 = 2.5d-3
-         n = 3
+         n = 2
          Y_bc(n-1,zone) = intmYO
 
 !c     --- OH
 !c     default preNov2017 = n/a
-         n = 5
+         n = 3
          Y_bc(n-1,zone) = intmYOH
 
 !c     --- Ar (force to zero, just for completeness)
-         n = Nspec
-         Y_bc(n-1,zone) = 0.d0
+!         n = Nspec
+!         Y_bc(n-1,zone) = 0.d0
 
 !c     --- N2 (penultimate species)
          sumY = zero
 !c     loop over all species apart from N2 and Ar, and calculate the sum
-         do n=1, Nspec-2
+         do n=1, Nspec-1
             sumY = sumY + Y_bc(n-1,zone)
          end do
 !c     now put the remainder into N2
-         n = Nspec-1
+         n = Nspec
          Y_bc(n-1,zone) = 1-sumY
 
          T_bc(zone) = wireTemp
