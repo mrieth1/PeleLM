@@ -40,13 +40,11 @@
 #include <DERIVE_F.H>
 
 #include <AMReX_buildInfo.H>
-
-#if defined(AMREX_USE_SUNDIALS_3x4x) && defined(AMREX_USE_CUDA)
+// GPU
 #include <actual_Creactor_GPU.h>
 #include <actual_Creactor_unit.h>
-#elif defined(AMREX_USE_SUNDIALS_3x4x) && !defined(AMREX_USE_CUDA)
-#include <CPU/actual_Creactor.h>
-#endif
+// CPU
+//#include <actual_Creactor.h>
 
 using namespace amrex;
 
@@ -1351,6 +1349,11 @@ PeleLM::init_once ()
                                     && RhoYdot_Type != State_Type;
 
   tag_bds.resize(4);
+  tag_bds[0] = -1; 
+  tag_bds[1] = 5;
+  tag_bds[2] = 15;
+  tag_bds[3] = 1000000;
+
   //
   // This is the minimum number of boxes per MPI proc that I want
   // when chopping up chemistry work.
@@ -5551,7 +5554,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       const auto fcl    = fc.view(lo);
       const auto frcing = frc.view(lo);
 
-      if (verbose ) 
+      if (verbose > 1) 
         amrex::Print() << "     *** New Fab, evaluate fc ?? " << evaluate_fc << '\n';
 
       if ((evaluate_fc) || (ncells_packing < 2)) {
@@ -5571,15 +5574,14 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 		      tmp_vect[nc*(nspecies+1) + nspecies] = rhoY(i,j,k,nspecies+2);
 		      tmp_vect_energy[nc]                  = rhoY(i,j,k,nspecies) * 10.0;
 		      tmp_src_vect_energy[nc]              = frcing(i,j,k,nspecies) * 10.0;
-#if defined(AMREX_USE_SUNDIALS_3x4x) && defined(AMREX_USE_CUDA)
+// GPU
 		      fcl(i,j,k) = react_unit(tmp_vect, tmp_src_vect,
 				  tmp_vect_energy, tmp_src_vect_energy,
 				  &pressure, &dt_incr, &time_init);
-#else
-		      fcl(i,j,k) = react(tmp_vect, tmp_src_vect,
-				  tmp_vect_energy, tmp_src_vect_energy,
-				  &pressure, &dt_incr, &time_init, &reInit);
-#endif
+//                      fcl(i,j,k) = react(tmp_vect, tmp_src_vect,
+//				  tmp_vect_energy, tmp_src_vect_energy,
+//				  &pressure, &dt_incr, &time_init, &reInit);
+
 		      dt_incr = dt;
 		      for (int sp=0;sp<nspecies; sp++){
 	                  rhoY(i,j,k,sp) = tmp_vect[nc*(nspecies+1) + sp] * 1.e+3;
@@ -5613,7 +5615,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 	  int num_cell_cvode_int = 0;
 	  int fcl_grp;
 	  for         (int tag = 0; tag < 3; ++tag) {
-              amrex::Print() << "     ***     Take care of tag " << tag << " " << tag_bds[tag] << " "<< tag_bds[tag+1] <<'\n';
+              //amrex::Print() << "     ***     Take care of tag " << tag << " " << tag_bds[tag] << " "<< tag_bds[tag+1] <<'\n';
               nc = 0;
               for         (int k = 0; k < len.z; ++k) {
                   for         (int j = 0; j < len.y; ++j) {
@@ -5688,7 +5690,9 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 		      //fcl(indx_i[l],indx_j[l],indx_k[l]) = fcl_grp;
 		  }
 	      } else {
-                  amrex::Print() << "     ***     -- ncells_packing, nc (should be 0) =" << ncells_packing << " "<< nc <<'\n';
+		  if (verbose > 1) {
+                      amrex::Print() << "     ***     -- ncells_packing, nc (should be 0) =" << ncells_packing << " "<< nc <<'\n';
+                  }
               }
 	  }
 	  if (num_cell_cvode_int != num_cell_in_FAB ) {

@@ -39,12 +39,11 @@
 #include <PeleLM_F.H>
 #include <AMReX_Utility.H>
 #include <NS_error_F.H>
-#if defined(AMREX_USE_SUNDIALS_3x4x) && defined(AMREX_USE_CUDA)
+// GPU
 #include <actual_Creactor_GPU.h>
 #include <actual_Creactor_unit.h>
-#elif defined(AMREX_USE_SUNDIALS_3x4x) && !defined(AMREX_USE_CUDA)
-#include <CPU/actual_Creactor.h>
-#endif
+// CPU
+//#include <actual_Creactor.h>
 
 using namespace amrex;
 
@@ -447,23 +446,17 @@ PeleLM::variableSetUp ()
   /* PelePhysics */
   amrex::Print() << " Initialization of network, reactor and transport \n";
   init_network();
-#if defined(AMREX_USE_SUNDIALS_3x4x) && defined(AMREX_USE_CUDA)
+
 #ifdef _OPENMP
 #pragma omp parallel
 #endif  
   reactor_init(&cvode_iE,&ncells_packing);
+// GPU
+#ifdef _OPENMP
+#pragma omp parallel
+#endif  
   reactor_unit_init(&cvode_iE);
-#elif defined(AMREX_USE_SUNDIALS_3x4x) && !defined(AMREX_USE_CUDA)
-#ifdef _OPENMP
-#pragma omp parallel
-#endif  
-  reactor_init(&cvode_iE,&ncells_packing);
-#else
-#ifdef _OPENMP
-#pragma omp parallel
-#endif  
-  reactor_init(&cvode_iE);
-#endif
+
   init_transport(use_tranlib);
 
   BCRec bc;
