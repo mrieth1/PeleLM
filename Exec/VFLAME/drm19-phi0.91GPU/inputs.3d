@@ -14,7 +14,7 @@ stop_time = 1.
 
 ns.do_active_control = 0
 
-max_step = 2480
+max_step = 2475
 
 # full size
 # #3D
@@ -50,7 +50,7 @@ geometry.coord_sys   =  0
 
 amr.checkpoint_files_output = 0
 amr.check_file      = chk
-amr.check_int       = 50
+amr.check_int       = 5
 
 amr.plot_file       = plt
 amr.plot_int        = 5
@@ -222,7 +222,7 @@ fab.format = NATIVE_32
 # ------------------  INPUTS TO ODE SOLVER -------------------
 ns.cvode_iJac = 1
 ns.cvode_iDense = 99
-ns.ncells_packing = 1
+ns.ncells_packing = 1024
 
 #ns.hack_nochem=1
 #ns.init_iter=0
