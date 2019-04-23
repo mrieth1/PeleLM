@@ -2,7 +2,7 @@
 # Begin LSF Directives
 #BSUB -P CSC308
 #BSUB -W 01:00
-#BSUB -nnodes 1
+#BSUB -nnodes 2
 #BSUB -alloc_flags gpumps
 #BSUB -J MySweetSim
 #BSUB -o MySweetSim.%J
@@ -15,5 +15,4 @@ set -x
  
 date
 
-##jsrun -n 1 -c 4 -a 4 ./PeleLM2d.gnu.MPI.ex inputs.3d
-jsrun -n 1 -c 1 -a 1 -g 1 ./PeleLM2d.pgi.MPI.CUDA.ex inputs.3d
+jsrun -n 2 -c 6 -a 6 -g 6 ./PeleLM2d.gnu.MPI.CUDA.ex inputs.3d
