@@ -8,7 +8,7 @@
 #
 
 DIM             = 2
-COMP            = pgi
+COMP            = gnu
 DEBUG           = FALSE
 USE_MPI         = TRUE
 USE_OMP         = FALSE
