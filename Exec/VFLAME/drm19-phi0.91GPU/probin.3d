@@ -41,11 +41,6 @@
   pamb = 1.013250e+05
   dpdt_factor = .3
  /
- &flctin
-  flct_file = "turbfile"
-  forceInflow = .TRUE.
-  nCompInflow = 3
- /
  &control
   tau_control = 2.5e-4
   sest = 4.e-01
