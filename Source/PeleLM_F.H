@@ -4,6 +4,7 @@
 #ifndef BL_LANG_FORT
 
 #include <AMReX_ArrayLim.H>
+#include <AMReX_BLFort.H>
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,9 +50,9 @@ extern "C" {
 			 const amrex::Real* Y, ARLIM_P(Ylo), ARLIM_P(Yhi));
 
   void pphys_CPMIXfromTY(const int* lo, const int* hi,
-		    BL_FORT_FAB_ARG_3D(CPMIX),
-		    const BL_FORT_FAB_ARG_3D(T),
-		    const BL_FORT_FAB_ARG_3D(Y));
+                         BL_FORT_FAB_ARG_3D(CPMIX),
+                         const BL_FORT_FAB_ARG_3D(T),
+                         const BL_FORT_FAB_ARG_3D(Y));
 
   int pphys_TfromHY(const int* lo, const int* hi,
 		     amrex::Real* T,       ARLIM_P(Tlo), ARLIM_P(Thi),
@@ -68,7 +69,7 @@ extern "C" {
   void pphys_network_close();
 
 #ifndef AMREX_USE_SUNDIALS_3x4x 
-  int reactor_init(const int* cvode_iE);
+  int reactor_init(const int* cvode_iE, const int* Ncells);
 
   int react(amrex::Real *rY_in, amrex::Real *rY_src_in, 
 		  amrex::Real *rX_in, amrex::Real *rX_src_in,
@@ -206,17 +207,17 @@ extern "C" {
   void init_typcals_common();
       
   void vel_visc(const int* lo, const int* hi,
-		    const BL_FORT_FAB_ARG_3D(tempdat),
-		    const BL_FORT_FAB_ARG_3D(specdat),
-		    BL_FORT_FAB_ARG_3D(betadat));
+                const BL_FORT_FAB_ARG_3D(T),
+                const BL_FORT_FAB_ARG_3D(Y),
+                BL_FORT_FAB_ARG_3D(mu));
 
   void spec_temp_visc(const int* lo, const int* hi,
-		         const BL_FORT_FAB_ARG_3D(tempdat),
-			 const BL_FORT_FAB_ARG_3D(specdat),
-			 BL_FORT_FAB_ARG_3D(betadat),
-                         const int* nCompD, const amrex::Real* P1ATM_MKS,
-                         const int* do_temp, const int* do_VelVisc, 
-                         const amrex::Real* Pamb_in);
+                      const BL_FORT_FAB_ARG_3D(T),
+                      const BL_FORT_FAB_ARG_3D(Y),
+                      BL_FORT_FAB_ARG_3D(beta),
+                      const int* nCompD, const amrex::Real* P1ATM_MKS,
+                      const int* do_temp, const int* do_VelVisc, 
+                      const amrex::Real* Pamb_in);
 
   void fab_minmax (const int* lo, const int* hi,
                       amrex::Real* fabdat, ARLIM_P(flo), ARLIM_P(fhi),

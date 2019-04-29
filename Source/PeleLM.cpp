@@ -513,10 +513,10 @@ PeleLM::getCpmixGivenTY_pphys(FArrayBox&       cpmix,
     BL_ASSERT(T.box().contains(box));
     BL_ASSERT(Y.box().contains(box));
     
-    pphys_CPMIXfromTY(ARLIM_3D(box.loVect()), ARLIM_3D(box.hiVect()),
-		     BL_TO_FORTRAN_N_3D(cpmix,sCompCp),
-		     BL_TO_FORTRAN_N_3D(T,sCompT),
-		     BL_TO_FORTRAN_N_3D(Y,sCompY));
+    pphys_CPMIXfromTY(BL_TO_FORTRAN_BOX(box),
+                      BL_TO_FORTRAN_N_3D(cpmix,sCompCp),
+                      BL_TO_FORTRAN_N_3D(T,sCompT),
+                      BL_TO_FORTRAN_N_3D(Y,sCompY));
 }
 
 
@@ -7340,11 +7340,11 @@ PeleLM::calcDiffusivity (const Real time)
     //                  ARLIM(bcen.loVect()),ARLIM(bcen.hiVect()),bcen.dataPtr(),
     //                  &nc_bcen, &P1atm_MKS, &dotemp, &vflag, &p_amb);
 
-    spec_temp_visc(ARLIM_3D(gbox.loVect()), ARLIM_3D(gbox.hiVect()),
-                      BL_TO_FORTRAN_N_3D(Temp_mf[mfi],0),
-                      BL_TO_FORTRAN_N_3D(Rho_and_spec_mf[mfi],1),
-                      BL_TO_FORTRAN_N_3D(bcen,0),
-                      &nc_bcen, &P1atm_MKS, &dotemp, &vflag, &p_amb);
+    spec_temp_visc(BL_TO_FORTRAN_BOX(gbox),
+                   BL_TO_FORTRAN_N_3D(Temp_mf[mfi],0),
+                   BL_TO_FORTRAN_N_3D(Rho_and_spec_mf[mfi],1),
+                   BL_TO_FORTRAN_N_3D(bcen,0),
+                   &nc_bcen, &P1atm_MKS, &dotemp, &vflag, &p_amb);
         
     FArrayBox& Dfab = diff[mfi];
 
@@ -7596,10 +7596,10 @@ PeleLM::compute_vel_visc (Real      time,
     //             ARLIM(rho_and_spec.loVect()),ARLIM(rho_and_spec.hiVect()),
     //             rho_and_spec.dataPtr(1),
     //             ARLIM(tmp.loVect()),ARLIM(tmp.hiVect()),tmp.dataPtr());
-    vel_visc(ARLIM_3D(box.loVect()), ARLIM_3D(box.hiVect()),
-		 BL_TO_FORTRAN_N_3D(temp,0),
-		 BL_TO_FORTRAN_N_3D(rho_and_spec,1),
-		 BL_TO_FORTRAN_N_3D(tmp,0));
+    vel_visc(BL_TO_FORTRAN_BOX(box),
+             BL_TO_FORTRAN_N_3D(temp,0),
+             BL_TO_FORTRAN_N_3D(rho_and_spec,1),
+             BL_TO_FORTRAN_N_3D(tmp,0));
 
     (*beta)[mfi].copy(tmp,box,0,box,0,1);
   }
