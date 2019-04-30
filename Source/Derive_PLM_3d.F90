@@ -8,7 +8,6 @@
 #include <AMReX_BC_TYPES.H>
 #include <Prob_F.H>
 #include <AMReX_ArrayLim.H>
-#include <ChemDriver_F.H>
 
 #   if   BL_SPACEDIM==1
 #       define  ARLIM(x)  x(1)
@@ -29,26 +28,24 @@ module derive_PLM_3D
   public :: drhomry, dsrhoydot, drhort, dermolefrac, derconcentration
 
 contains
-
-
+ 
   subroutine drhomry (e,DIMS(e),nv,dat,DIMS(dat),ncomp, &
                       lo,hi,domlo,domhi,delta,xlo,time,dt,bc, &
                       level,grid_no) &
                       bind(C, name="drhomry")
 
 
-      implicit none
+    implicit none
 !
 ! ::: This routine will computes rho - sum (rho*Y)
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
-      integer    lo(SDIM), hi(SDIM)
+      integer    lo(3), hi(3)
       integer    DIMDEC(e)
       integer    DIMDEC(dat)
-      integer    domlo(SDIM), domhi(SDIM)
+      integer    domlo(SDIM), domhi(3)
       integer    nv, ncomp
       integer    bc(SDIM,2,ncomp)
       REAL_T     delta(SDIM), xlo(SDIM), time, dt
@@ -96,13 +93,12 @@ contains
                         lo,hi,domlo,domhi,delta,xlo,time,dt,bc, &
                         level,grid_no) &
                         bind(C, name="dsrhoydot")
-          
-      implicit none
+
+    implicit none
 !
 ! ::: This routine will computes sum (rhoYdot or Ydot)
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
       integer    lo(SDIM), hi(SDIM)
@@ -147,6 +143,10 @@ contains
             enddo
          enddo
       enddo
+!
+!     end of routine
+!
+    return
 
   end subroutine dsrhoydot
 
@@ -156,14 +156,16 @@ contains
                      lo,hi,domlo,domhi,delta,xlo,time,dt,bc, &
                      level,grid_no) &
                      bind(C, name="drhort")
-                     
-      use chem_driver_3D, only: PfromRTY
-      implicit none
+
+    use network,        only : nspec
+    use PeleLM_3D, only: pphys_PfromRTY
+    
+    implicit none
+
 !     
 ! ::: This routine will derive rho*R*T
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
       
       integer    lo(SDIM), hi(SDIM)
@@ -179,7 +181,7 @@ contains
 
       integer    i, j, k, n, rho, T, fS
       integer    nxlo,nxhi,nylo,nyhi,nzlo,nzhi
-      REAL_T     Yt(maxspec)
+      REAL_T     Yt(nspec)
       integer lo_chem(SDIM),hi_chem(SDIM)
       data lo_chem /1,1,1/
       data hi_chem /1,1,1/
@@ -207,7 +209,7 @@ contains
                do n=1,Nspec
                   Yt(n) = dat(i,j,k,fS+n-1) / dat(i,j,k,rho)
                end do
-               call PfromRTY(lo_chem, hi_chem, &
+               call pphys_PfromRTY(lo_chem, hi_chem, &
                    e(i,j,k,1),     ARLIM(lo_chem),ARLIM(hi_chem), &
                    dat(i,j,k,rho), ARLIM(lo_chem),ARLIM(hi_chem), &
                    dat(i,j,k,T),   ARLIM(lo_chem),ARLIM(hi_chem), &
@@ -219,16 +221,16 @@ contains
 
 !=========================================================
 
-  subroutine dermolefrac(x,DIMS(x),nv,dat,DIMS(dat),ncomp, &
-                         lo,hi,domlo,domhi,delta,xlo,time,dt,bc, &
-                         level,grid_no) &
-                         bind(C, name="dermolefrac")
-                          
-      use chem_driver_3D, only : mass_to_mole
-      implicit none
+  subroutine dermolefrac (x,DIMS(x),nv,dat,DIMS(dat),ncomp, &
+                          lo,hi,domlo,domhi,delta,xlo,time,dt,bc, &
+                          level,grid_no) &
+                          bind(C, name="dermolefrac")
 
-#include <cdwrk.H>
+    use network,        only : nspec
+    use PeleLM_3D, only : pphys_mass_to_mole
 
+    implicit none
+    
       integer    lo(SDIM), hi(SDIM)
       integer    DIMDEC(x)
       integer    DIMDEC(dat)
@@ -241,7 +243,7 @@ contains
       integer    level, grid_no
 
       integer i,j,k,n
-      REAL_T Yt(maxspec),Xt(maxspec)
+      REAL_T Yt(nspec),Xt(nspec)
       integer fS,rho
       integer lo_chem(SDIM),hi_chem(SDIM)
       data lo_chem /1,1,1/
@@ -256,7 +258,7 @@ contains
                do n = 1,Nspec
                   Yt(n) = dat(i,j,k,fS+n-1)/dat(i,j,k,rho) 
                enddo
-               call mass_to_mole(lo_chem, hi_chem, &
+               call pphys_mass_to_mole(lo_chem, hi_chem, &
                           Yt, ARLIM(lo_chem),ARLIM(hi_chem), &
                           Xt, ARLIM(lo_chem),ARLIM(hi_chem))
                do n = 1,Nspec
@@ -266,20 +268,19 @@ contains
          enddo
       enddo
 
-
   end subroutine dermolefrac
 
 !=========================================================
   
   subroutine derconcentration (C,DIMS(C),nv,dat,DIMS(dat),ncomp, &
-                              lo,hi,domlo,domhi,delta,xlo,time,dt,bc, &
-                              level,grid_no) &
+                               lo,hi,domlo,domhi,delta,xlo,time,dt,bc, &
+                               level,grid_no) &
                                bind(C, name="derconcentration")
-                               
-      use chem_driver_3D, only: MASSR_TO_CONC
-      implicit none
 
-#include <cdwrk.H>
+    use network,        only : nspec
+    use PeleLM_3D, only: pphys_massr_to_conc
+                               
+    implicit none
 
       integer    lo(SDIM), hi(SDIM)
       integer    DIMDEC(C)
@@ -293,7 +294,7 @@ contains
       integer    level, grid_no
 
       integer i,j,k,n
-      REAL_T Yt(maxspec),Ct(maxspec)
+      REAL_T Yt(nspec),Ct(nspec)
       integer fS,rho,T
       integer lo_chem(SDIM),hi_chem(SDIM)
       data lo_chem /1,1,1/
@@ -309,18 +310,17 @@ contains
                do n = 1,Nspec
                   Yt(n) = dat(i,j,k,fS+n-1)/dat(i,j,k,rho) 
                enddo
-               call MASSR_TO_CONC(lo_chem,hi_chem, &
-                Yt,             ARLIM(lo_chem),ARLIM(hi_chem), &
-                dat(i,j,k,T),   ARLIM(lo_chem),ARLIM(hi_chem), &
-                dat(i,j,k,rho), ARLIM(lo_chem),ARLIM(hi_chem), &
-                Ct,             ARLIM(lo_chem),ARLIM(hi_chem))
+               call pphys_massr_to_conc(lo_chem,hi_chem, &
+                  Yt,           ARLIM(lo_chem),ARLIM(hi_chem), &
+                  dat(i,j,k,T),   ARLIM(lo_chem),ARLIM(hi_chem), &
+                  dat(i,j,k,rho), ARLIM(lo_chem),ARLIM(hi_chem), &
+                  Ct,           ARLIM(lo_chem),ARLIM(hi_chem))
                do n = 1,Nspec
                   C(i,j,k,n) = Ct(n)
                enddo
             enddo
          enddo
       enddo
-
 
   end subroutine derconcentration
 
@@ -337,7 +337,6 @@ contains
 ! ::: This routine will computes the forcing term
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
       integer    lo(SDIM), hi(SDIM)
@@ -513,7 +512,6 @@ contains
 ! ::: This routine will computes the forcing term
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
       integer    lo(SDIM), hi(SDIM)
@@ -665,7 +663,6 @@ contains
 ! ::: This routine will computes the forcing term
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
       integer    lo(SDIM), hi(SDIM)
@@ -818,7 +815,6 @@ contains
 ! ::: This routine will computes the forcing term
 !
 
-#include <cdwrk.H>
 #include <htdata.H>
 
       integer    lo(SDIM), hi(SDIM)
