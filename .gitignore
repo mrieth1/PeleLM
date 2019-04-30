@@ -2,6 +2,15 @@
 *~
 *.swp
 *.csv
+*_bu
+out_*
+*_test
+*_new
+*_hack*
+*_HACK*
+*.ANNE
+*_bu
+*_save
 
 # BoxLib build directories
 d/
@@ -10,10 +19,6 @@ f/
 extern.f90
 AMReX_buildInfo.cpp
 *.dSYM
-*_bu
-out_*
-*_test
-*_new
 
 # Executable
 *.ex
@@ -27,10 +32,12 @@ Backtrace*
 grdlog
 chk*
 grdlog
-*_bu
 
 # OSX files
 .DS_Store
 
 # script
 *.py
+
+# others
+turbfile
