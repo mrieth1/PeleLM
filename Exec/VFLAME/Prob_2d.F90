@@ -261,7 +261,7 @@ contains
         do n=1,Nspec
           Y_bc(n-1,zone) = Yt(n)
         end do
-        
+
         T_bc(zone) = pmf_vals(1)
         u_bc(zone) = zero
         if (V_in .lt. 0) then
@@ -269,7 +269,7 @@ contains
         else
           v_bc(zone) = V_in
         endif
-              
+            
       endif
 
     else if (probtype(1:len).eq.BL_PROB_DIFFUSION) then
@@ -439,7 +439,7 @@ contains
         getZone = BL_FUELPIPE
       endif
 
-      else if (probtype(1:len).eq.BL_PROB_PREMIXED_OSCILLATOR) then
+    else if (probtype(1:len).eq.BL_PROB_PREMIXED_OSCILLATOR) then
          
          if (abs(x) .ge. jetRad) then
 !c     overridden in bcfunction
@@ -452,7 +452,7 @@ contains
             getZone = BL_PO_WALL
          endif
          
-      else
+    else
          call bl_pd_abort()
     endif
 
@@ -670,10 +670,10 @@ contains
 ! ::: -----------------------------------------------------------
 
   subroutine init_data(level,time,lo,hi,nscal, &
-     	 	                   vel,scal,DIMS(state),press,DIMS(press), &
+                           vel,scal,DIMS(state),press,DIMS(press), &
                            delta,xlo,xhi) &
                            bind(C, name="init_data")
-                              
+
       use network,   only: nspec
       use PeleLM_F,  only: pphys_getP1atm_MKS, pphys_get_spec_name2
       use PeleLM_2D, only: pphys_RHOfromPTY, pphys_HMIXfromTY
@@ -726,10 +726,10 @@ contains
                if (pertmag .gt. 0.d0) then
                   Lx = domnhi(1) - domnlo(1)
                   pert = pertmag*(1.000 * sin(2*Pi*4*x/Lx) &
-                      + 1.023 * sin(2*Pi*2*(x-.004598)/Lx) &
-                         + 0.945 * sin(2*Pi*3*(x-.00712435)/Lx)  &
-                             + 1.017 * sin(2*Pi*5*(x-.0033)/Lx)  &
-                                  + .982 * sin(2*Pi*5*(x-.014234)/Lx) )
+                                + 1.023 * sin(2*Pi*2*(x-.004598)/Lx) &
+                                + 0.945 * sin(2*Pi*3*(x-.00712435)/Lx)  &
+                                + 1.017 * sin(2*Pi*5*(x-.0033)/Lx)  &
+                                + .982 * sin(2*Pi*5*(x-.014234)/Lx) )
                endif
                   
                y1 = (y - standoff - 0.5d0*delta(2) + pert)*100.d0
@@ -933,7 +933,6 @@ contains
       endif
 
       Patm = pamb / pphys_getP1atm_MKS()
-!      write(6,*)"Patm",Patm
 
       call pphys_RHOfromPTY(lo,hi, &
           scal(ARG_L1(state),ARG_L2(state),Density),  DIMS(state), &
@@ -1097,8 +1096,8 @@ contains
   subroutine FORT_DENERROR (tag,DIMS(tag),set,clear, &
                                rho,DIMS(rho),lo,hi,nvar,  &
                                domlo,domhi,dx,xlo, &
-     			                     problo,time,level) &
-                               bind(C, name="FORT_DENERROR")
+                		        problo,time,level) &
+                             bind(C, name="FORT_DENERROR")
                                
       implicit none
       integer   DIMDEC(rho)
@@ -1121,9 +1120,9 @@ contains
   subroutine flame_tracer_error (tag,DIMS(tag),set,clear, &
                                  ftrac,DIMS(ftrac),lo,hi,nvar,  &
                                  domlo,domhi,dx,xlo, &
-     			                       problo,time,level) &
+     			              problo,time,level) &
                                  bind(C, name="flame_tracer_error")
-                        
+
       implicit none
       integer   DIMDEC(ftrac)
       integer   DIMDEC(tag)
@@ -1172,10 +1171,10 @@ contains
 ! ::: -----------------------------------------------------------
 
   subroutine adv_error (tag,DIMS(tag),set,clear, &
-                               adv,DIMS(adv),lo,hi,nvar, &
-                               domlo,domhi,delta,xlo, &
-     			        problo,time,level)&
-                  bind(C, name="adv_error")
+                        adv,DIMS(adv),lo,hi,nvar, &
+                        domlo,domhi,delta,xlo, &
+                        problo,time,level)&
+                        bind(C, name="adv_error")
                   
       implicit none
       integer   DIMDEC(tag)
@@ -1194,9 +1193,10 @@ contains
       if ( (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW) &
           .or. (probtype(1:len).eq.BL_PROB_PREMIXED_CONTROLLED_INFLOW) ) then
          call mv_error(tag,DIMS(tag),set,clear, &
-                          adv,DIMS(adv),lo,hi,nvar, &
-                          domlo,domhi,delta,xlo, &
-                          problo,time,level)
+                       adv,DIMS(adv),lo,hi,nvar, &
+                       domlo,domhi,delta,xlo, &
+                       problo,time,level)
+
       endif
       
   end subroutine adv_error
@@ -1239,7 +1239,6 @@ contains
       integer   tag(DIMV(tag))
       REAL_T    temperature(DIMV(temp),nvar)
 
-!      REAL_T    ax, ay, aerr
       integer   i, j, ng
 
 #include <probdata.H>
@@ -1295,10 +1294,10 @@ contains
 ! ::: -----------------------------------------------------------
 
    subroutine mv_error (tag,DIMS(tag),set,clear, &
-                              vort,DIMS(vort),lo,hi,nvar,  &
-                              domlo,domhi,dx,xlo, &
-     			       problo,time,level)&
-                 bind(C, name="mv_error")
+                        vort,DIMS(vort),lo,hi,nvar,  &
+                        domlo,domhi,dx,xlo, &
+                        problo,time,level)&
+                        bind(C, name="mv_error")
                  
       implicit none
       integer   DIMDEC(tag)
@@ -1318,7 +1317,7 @@ contains
          do j = lo(2), hi(2)
             do i = lo(1), hi(1)
                tag(i,j) = merge(set,tag(i,j), &
-                   ABS(vort(i,j,1)).ge.vorterr*2.d0**level)
+                         ABS(vort(i,j,1)).ge.vorterr*2.d0**level)
             enddo
          enddo
       end if

@@ -7,7 +7,7 @@
 # icfile has rms of about 0.38 - that's about right for 8% of 5m/s
 #ht.velocity_plotfile= icfile
 
-#amr.restart = chk01200
+amr.restart = chk01200
 #amr.regrid_on_restart = 1
 
 stop_time = 1.
@@ -15,17 +15,18 @@ stop_time = 1.
 ns.do_active_control = 0
 
 max_step = 1205
-max_step = 2
 
 # full size
 # #3D
-geometry.prob_lo = -0.024 -0.0005  0.0    
-geometry.prob_hi =  0.024  0.0005  0.048
+#geometry.prob_lo = -0.024 -0.004  0.0    
+#geometry.prob_hi =  0.024  0.004  0.048
+geometry.prob_lo = -0.024 0.0 
+geometry.prob_hi =  0.024 0.048
 
 # full size
 # #3D
 #amr.n_cell = 384 64 384
-amr.n_cell = 384 8 384
+amr.n_cell = 384 384
 
 amr.max_level = 2
 amr.ref_ratio = 2 2
@@ -33,14 +34,14 @@ amr.regrid_int = 2
 amr.n_error_buf = 2 2
 
 # #3D
-ns.lo_bc             =  2 0 1
-ns.hi_bc             =  2 0 2
-geometry.is_periodic =  0 1 0
-geometry.coord_sys   =  0
-#ns.lo_bc             =  2 1
-#ns.hi_bc             =  2 2
-#geometry.is_periodic =  0 0
+#ns.lo_bc             =  2 0 1
+#ns.hi_bc             =  2 0 2
+#geometry.is_periodic =  0 1 0
 #geometry.coord_sys   =  0
+ns.lo_bc             =  2 1
+ns.hi_bc             =  2 2
+geometry.is_periodic =  0 0
+geometry.coord_sys   =  0
 
 # >>>>>>>>>>>>>  BC FLAGS <<<<<<<<<<<<<<<<
 # 0 = Interior           3 = Symmetry
@@ -73,7 +74,7 @@ amr.grid_log        = grid.log
 amr.max_grid_size   = 32
 #amr.derive_plot_vars=ALL
 
-amr.probin_file     = probin.3d
+amr.probin_file     = probin.2d
 
 ht.plot_consumption  = 1
 ht.plot_heat_release = 1

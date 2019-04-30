@@ -37,7 +37,8 @@ contains
   subroutine amrex_probinit (init,name,namlen,problo,probhi) bind(c)
   
       
-      use chem_driver, only: P1ATMMKS
+      use network,   only: nspec
+      use PeleLM_F,  only: pphys_getP1atm_MKS
       
       implicit none
       integer init, namlen
@@ -46,7 +47,6 @@ contains
       REAL_T problo(SDIM), probhi(SDIM)
 
 #include <probdata.H>
-#include <cdwrk.H>
 #include <htdata.H>
 #include <bc.H>
 #if defined(BL_DO_FLCT)
@@ -64,12 +64,14 @@ contains
 
       namelist /fortin/ vorterr, temperr, adverr, tempgrad, &
                        flametracval, probtype, &
-     		        max_temp_lev, max_vort_lev, max_trac_lev, &
+                       max_temp_lev, max_vort_lev, max_trac_lev, &
                        traceSpecVal,phi_in,T_in,  &
                        turb_scale, V_in, V_co, &
-                       standoff, pertmag, nchemdiag, splitx, xfrontw, &
+                       standoff, pertmag, pertmode, nchemdiag, splitx, xfrontw, &
                        splity, yfrontw, blobx, bloby, blobz, blobr, &
-                       blobT, Tfrontw, stTh, fuel_N2_vol_percent
+                       blobT, Tfrontw, stTh, fuel_N2_vol_percent, &
+                       flameAngle, jetRad, wireRad, wireDelta, wireAmp, &
+                       wireFreq, wireTemp, wireVel, initPertScale, intmYH, intmYO, intmYOH
       namelist /heattransin/ pamb, dpdt_factor, closed_chamber
 #if defined(BL_DO_FLCT)
       integer nCompFile
@@ -155,7 +157,7 @@ contains
       max_vort_lev = 0
       max_trac_lev = 100
       traceSpecVal = 1.d-10
-      pamb = P1ATMMKS()
+      pamb = pphys_getP1atm_MKS()
       dpdt_factor = 0.3d0
       closed_chamber = 0
 
@@ -603,112 +605,194 @@ contains
   end subroutine amrex_probinit
   
 !------------------------------------
-
+  
   subroutine setupbc()bind(C, name="setupbc")
+
+    use network,   only: nspec
+    use PeleLM_F, only: pphys_getP1atm_MKS
+    use PeleLM_3D, only: pphys_RHOfromPTY, pphys_HMIXfromTY
+    use probspec_module, only: set_Y_from_Phi
   
-      use chem_driver, only: P1ATMMKS
-      use chem_driver_3D, only: RHOfromPTY, HMIXfromTY
-      use probspec_module, only: set_Y_from_Phi
-  
-      implicit none
-      
+    implicit none
+
 #include <cdwrk.H>
+#include <conp.H>
 #include <bc.H>
 #include <probdata.H>
 #include <htdata.H>
+      
+    REAL_T Patm, pmf_vals(maxspec+3), a
+    REAL_T Xt(maxspec), Yt(maxspec), loc
+    integer zone, n, fuelZone, airZone, region
+    integer b(SDIM)
+    integer num_zones_defined, len
+    data  b / 1, 1, 1 /
 
-      REAL_T Patm, pmf_vals(maxspec+3)
-      REAL_T Xt(maxspec), Yt(maxspec), loc
-      integer zone, n, len, b(SDIM), num_zones_defined
-      data  b / 1, 1, 1 /
-
-      Patm = pamb / 101325.0d0
-      num_zones_defined = 0
-      len = len_trim(probtype)
-      if ( (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW) &
+    REAL_T sumY
+      
+    Patm = pamb / pphys_getP1atm_MKS()
+    num_zones_defined = 0
+    len = len_trim(probtype)
+    
+    
+    if ( (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW) &
           .or. (probtype(1:len).eq.BL_PROB_PREMIXED_CONTROLLED_INFLOW) &
           .or. (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW_FORCED) & 
           .or. (probtype(1:len).eq.BL_PROB_PREMIXED_CONTROLLED_INFLOW_FORCED) ) then
          
 !     Take fuel mixture from prob data
 
-         zone = getZone(domnlo(1), domnlo(2), domnlo(3))
-         num_zones_defined = 1
-         
-         if (phi_in.gt.zero) then
-
-            call set_Y_from_Phi(phi_in,Yt)
-            do n=1,Nspec
-               Y_bc(n-1,zone) = Yt(n)
-            end do
-            T_bc(zone) = T_in
-            u_bc(zone) = zero
-            v_bc(zone) = zero
-            w_bc(zone) = V_in
-
-         else 
-
-!     Take fuel mixture from pmf file
-            loc = (domnlo(3)-standoff)*100.d0
-            call pmf(loc,loc,pmf_vals,n)
-            if (n.ne.Nspec+3) then
-               call bl_pd_abort('INITDATA: n(pmf) .ne. Nspec+3')
-            endif
-            
-            do n = 1,Nspec
-               Xt(n) = pmf_vals(3+n)
-            end do 
-            
-            CALL CKXTY (Xt, Yt)
-
-            do n=1,Nspec
-               Y_bc(n-1,zone) = Yt(n)
-            end do
-            T_bc(zone) = pmf_vals(1)
-            u_bc(zone) = zero
-            v_bc(zone) = zero
-            if (V_in .lt. 0) then
-               w_bc(zone) = pmf_vals(2)*1.d-2
-            else
-               w_bc(zone) = V_in
-            endif
-            
-         endif
+      zone = getZone(domnlo(1), domnlo(2), domnlo(3))
+      num_zones_defined = 1
+           
+      if (phi_in.gt.zero) then
+  
+        print *, "before set_Y_from_Phi in 'setupbc()' "
+        print *, Nspec
+        call set_Y_from_Phi(phi_in,Yt)
+        do n=1,Nspec
+          Y_bc(n-1,zone) = Yt(n)
+        end do
+        T_bc(zone) = T_in
+        u_bc(zone) = zero
+        v_bc(zone) = zero
+        w_bc(zone) = V_in
 
       else 
+  
+  !     Take fuel mixture from pmf file
+        loc = (domnlo(3)-standoff)*100.d0
+        call pmf(loc,loc,pmf_vals,n)
+        if (n.ne.Nspec+3) then
+          call bl_pd_abort('INITDATA: n(pmf) .ne. Nspec+3')
+        endif
+              
+        do n = 1,Nspec
+          Xt(n) = pmf_vals(3+n)
+        end do 
+              
+        CALL CKXTY (Xt, Yt)
+  
+        do n=1,Nspec
+          Y_bc(n-1,zone) = Yt(n)
+        end do
 
-         print *,'Unrecognized probtype'
-         call bl_pd_abort()
-
+        T_bc(zone) = pmf_vals(1)
+        u_bc(zone) = zero
+        v_bc(zone) = zero
+        if (V_in .lt. 0) then
+          w_bc(zone) = pmf_vals(2)*1.d-2
+        else
+          w_bc(zone) = V_in
+        endif
+            
       endif
 
-      do zone=1,num_zones_defined
+    ! ANNE
+    else if (probtype(1:len).eq.BL_PROB_PREMIXED_OSCILLATOR) then
+
+!c     premixed oscillator
+!c     INLET
+         zone = BL_PO_INLET
+         call set_Y_from_Phi(phi_in,Yt)
+         do n=1,Nspec
+            Y_bc(n-1,zone) = Yt(n)
+         end do
+         T_bc(zone) = T_in
+         u_bc(zone) = zero
+         v_bc(zone) = zero
+         w_bc(zone) = V_in
+
+!c     WIRE
+         zone = BL_PO_WIRE
+         do n=1,Nspec
+            Y_bc(n-1,zone) = Yt(n)
+         end do
+!c     Add some intermediate species to the wire
+!c     should try to make sure it all adds up to 1...
+!c     --- H
+!c     default preNov2017 = 3.2d-4
+         n = 2
+         Y_bc(n-1,zone) = intmYH
+
+!c     --- O
+!c     default preNov2017 = 2.5d-3
+         n = 3
+         Y_bc(n-1,zone) = intmYO
+
+!c     --- OH
+!c     default preNov2017 = n/a
+         n = 5
+         Y_bc(n-1,zone) = intmYOH
+
+!c     --- Ar (force to zero, just for completeness)
+         n = Nspec
+         Y_bc(n-1,zone) = 0.d0
+
+!c     --- N2 (penultimate species)
+         sumY = zero
+!c     loop over all species apart from N2 and Ar, and calculate the sum
+         do n=1, Nspec-2
+            sumY = sumY + Y_bc(n-1,zone)
+         end do
+!c     now put the remainder into N2
+         n = Nspec-1
+         Y_bc(n-1,zone) = 1-sumY
+
+         T_bc(zone) = wireTemp
+         u_bc(zone) = zero
+         v_bc(zone) = zero
+         w_bc(zone) = wireVel
+
+!c     WALL
+         zone = BL_PO_WALL
+         do n=1,Nspec
+            Y_bc(n-1,zone) = Yt(n)
+         end do
+         T_bc(zone) = T_in
+         u_bc(zone) = zero
+         v_bc(zone) = zero
+         w_bc(zone) = zero
+
+         num_zones_defined = 3
+
+
+    else
+         
+      print *,'Unrecognized probtype'
+      call bl_pd_abort()
+
+    endif
+
+    do zone=1,num_zones_defined
 !     Set density and hmix consistent with data
 
-         call RHOfromPTY(b, b, &
-                             rho_bc(zone), DIMARG(b), DIMARG(b), &
-                             T_bc(zone),   DIMARG(b), DIMARG(b), &
-                             Y_bc(0,zone), DIMARG(b), DIMARG(b), Patm)
-         call HMIXfromTY(b, b, &
-                             h_bc(zone),   DIMARG(b), DIMARG(b), &
-                             T_bc(zone),   DIMARG(b), DIMARG(b), &
-                             Y_bc(0,zone), DIMARG(b), DIMARG(b))
-      enddo
-      bcinit = .true.
+      call pphys_RHOfromPTY(b, b, &
+                           rho_bc(zone), DIMARG(b), DIMARG(b), &
+                           T_bc(zone),   DIMARG(b), DIMARG(b), &
+                           Y_bc(0,zone), DIMARG(b), DIMARG(b), Patm)
+      call pphys_HMIXfromTY(b, b, &
+                           h_bc(zone),   DIMARG(b), DIMARG(b), &
+                           T_bc(zone),   DIMARG(b), DIMARG(b), &
+                           Y_bc(0,zone), DIMARG(b), DIMARG(b))
+    enddo
+    
+    bcinit = .true.
 
   end subroutine setupbc
 
 ! ::: -----------------------------------------------------------
       
-  integer function getZone(x, y,z)bind(C, name="getZone")
+  integer function getZone(x, y, z)bind(C, name="getZone")
 
       implicit none
+
 #include <cdwrk.H>
 #include <bc.H>
 #include <probdata.H>
 
-      REAL_T x, y, z
-      integer len
+    REAL_T x, y, z
+    integer len
 
 !#define BL_FUELPIPE 1
 !#define BL_COFLOW   2
@@ -718,27 +802,41 @@ contains
 !#define BL_VOLUME   6
 !#define BL_PIPEEND  7
 
-      getZone = BL_VOLUME
-      len     = len_trim(probtype)
+    getZone = BL_VOLUME
+    len     = len_trim(probtype)
 
-      if ( (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW) &
+    if ( (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW) &
           .or. (probtype(1:len).eq.BL_PROB_PREMIXED_CONTROLLED_INFLOW) &
           .or. (probtype(1:len).eq.BL_PROB_PREMIXED_FIXED_INFLOW_FORCED)  &
           .or. (probtype(1:len).eq.BL_PROB_PREMIXED_CONTROLLED_INFLOW_FORCED) ) then
 
-         getZone = BL_FUELPIPE
+      getZone = BL_FUELPIPE
          
-      else
+    else if (probtype(1:len).eq.BL_PROB_PREMIXED_OSCILLATOR) then
 
+         if (abs(x) .ge. jetRad) then
+!c     overridden in bcfunction
+!c            if (abs(x-wirePos).ge.wireRad) then
+               getZone = BL_PO_INLET
+!c            else
+!c               getZone = BL_PO_WIRE
+!c            endif
+         else
+            getZone = BL_PO_WALL
+         endif
+         
+    else
          call bl_pd_abort('Unrecognized probtype')
+    endif
 
-      endif
   end function getZone
       
 !-----------------------
 
   subroutine bcfunction(x,y,z,time,u,v,w,rho,Yl,T,h,dx,getuvw) &
                         bind(C, name="bcfunction")
+
+      use network,   only: nspec 
 
       implicit none
 
@@ -751,6 +849,9 @@ contains
 #include <probdata.H>
 
       integer n, zone, len
+      REAL_T eta, xmid, etamax
+
+      REAL_T wirePos, alpha
 
       if (.not. bcinit) then
          call bl_abort('Need to initialize boundary condition function')
@@ -784,27 +885,64 @@ contains
             endif
          endif
 
-      else
+      else if (probtype(1:len).eq.BL_PROB_PREMIXED_OSCILLATOR) then
 
+!c     Override getzone for t-dep
+         wirePos = wireAmp*sin(two*Pi*wireFreq*time)
+         
+         if (abs(x).lt.jetRad) then
+!c     Use a hyperbolic tangent to smooth the wire and make it less discrete
+            alpha = 0.5d0*(1-tanh((abs(x-wirePos)-wireRad)/wireDelta))
+            rho = alpha*rho_bc(BL_PO_WIRE)+(1.d0-alpha)*rho_bc(BL_PO_INLET)
+            do n = 0, Nspec-1
+               Yl(n) = alpha*Y_bc(n,BL_PO_WIRE)+(1.d0-alpha)*Y_bc(n,BL_PO_INLET)
+            end do
+            T = alpha*T_bc(BL_PO_WIRE)+(1.d0-alpha)*T_bc(BL_PO_INLET)
+            h = alpha*h_bc(BL_PO_WIRE)+(1.d0-alpha)*h_bc(BL_PO_INLET)
+            if (getuvw .eqv. .TRUE.) then
+               u = alpha*u_bc(BL_PO_WIRE)+(1.d0-alpha)*u_bc(BL_PO_INLET)
+               v = alpha*v_bc(BL_PO_WIRE)+(1.d0-alpha)*v_bc(BL_PO_INLET)
+               w = alpha*w_bc(BL_PO_WIRE)+(1.d0-alpha)*w_bc(BL_PO_INLET)
+            endif
+         else
+            zone = BL_PO_WALL
+            rho = rho_bc(zone)
+            do n = 0, Nspec-1
+               Yl(n) = Y_bc(n,zone)
+            end do
+            T = T_bc(zone)
+            h = h_bc(zone)
+            if (getuvw .eqv. .TRUE.) then
+               u = u_bc(zone)
+               v = v_bc(zone)
+               w = w_bc(zone)
+            endif
+         endif
+
+
+      else
          write(6,*) 'No boundary condition for probtype = ', probtype(1:len)
          write(6,*) 'Available: '
          write(6,*) '            ',BL_PROB_PREMIXED_FIXED_INFLOW
          write(6,*) '            ',BL_PROB_PREMIXED_CONTROLLED_INFLOW
          write(6,*) '            ',BL_PROB_PREMIXED_FIXED_INFLOW_FORCED
          write(6,*) '            ',BL_PROB_PREMIXED_CONTROLLED_INFLOW_FORCED
+         write(6,*) '            ',BL_PROB_PREMIXED_OSCILLATOR
          call bl_pd_abort(' ')
       endif
+      
   end subroutine bcfunction
 
 ! ::: -----------------------------------------------------------
       
   subroutine init_data_new_mech (level,time,lo,hi,nscal, &
-                                 vel,scal,DIMS(state),press,DIMS(press), &
-                                 delta,xlo,xhi)&
-                                 bind(C, name="init_data_new_mech")
+          vel,scal,DIMS(state),press,DIMS(press), &
+          delta,xlo,xhi)&
+          bind(C, name="init_data_new_mech")
           
-      use chem_driver, only: P1ATMMKS
-      use chem_driver_3D, only: RHOfromPTY, HMIXfromTY
+      use network,   only: nspec
+      use PeleLM_F,  only: pphys_getP1atm_MKS
+      use PeleLM_3D, only: pphys_RHOfromPTY, pphys_HMIXfromTY
       
       implicit none
       integer  level, nscal
@@ -817,7 +955,6 @@ contains
       REAL_T   scal(DIMV(state),nscal)
       REAL_T   press(DIMV(press))
  
-#include <cdwrk.H>
 #include <htdata.H>
 #include <bc.H>
 #include <probdata.H>
@@ -833,14 +970,14 @@ contains
          end do
       end do
  
-      Patm = pamb / 101325.0d0
+      Patm = pamb / pphys_getP1atm_MKS()
  
-      call RHOfromPTY(lo,hi, &
+      call pphys_RHOfromPTY(lo,hi, &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),Density),  DIMS(state), &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),Temp),     DIMS(state), &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),FirstSpec),DIMS(state), &
           Patm)
-      call HMIXfromTY(lo,hi, &
+      call pphys_HMIXfromTY(lo,hi, &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),RhoH),     DIMS(state), &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),Temp),     DIMS(state), &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),FirstSpec),DIMS(state))
@@ -858,45 +995,45 @@ contains
  
   end subroutine init_data_new_mech
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine is called at problem setup time and is used
-!c ::: to initialize data on each grid.  The velocity field you
-!c ::: provide does not have to be divergence free and the pressure
-!c ::: field need not be set.  A subsequent projection iteration
-!c ::: will define aa divergence free velocity field along with a
-!c ::: consistant pressure.
-!c ::: 
-!c ::: NOTE:  all arrays have one cell of ghost zones surrounding
-!c :::        the grid interior.  Values in these cells need not
-!c :::        be set here.
-!c ::: 
-!c ::: INPUTS/OUTPUTS:
-!c ::: 
-!c ::: level     => amr level of grid
-!c ::: time      => time at which to init data             
-!c ::: lo,hi     => index limits of grid interior (cell centered)
-!c ::: nscal     => number of scalar quantities.  You should know
-!c :::		   this already!
-!c ::: vel      <=  Velocity array
-!c ::: scal     <=  Scalar array
-!c ::: press    <=  Pressure array
-!c ::: delta     => cell size
-!c ::: xlo,xhi   => physical locations of lower left and upper
-!c :::              right hand corner of grid.  (does not include
-!c :::		   ghost region).
-!c ::: -----------------------------------------------------------
+! ::: -----------------------------------------------------------
+! ::: This routine is called at problem setup time and is used
+! ::: to initialize data on each grid.  The velocity field you
+! ::: provide does not have to be divergence free and the pressure
+! ::: field need not be set.  A subsequent projection iteration
+! ::: will define aa divergence free velocity field along with a
+! ::: consistant pressure.
+! ::: 
+! ::: NOTE:  all arrays have one cell of ghost zones surrounding
+! :::        the grid interior.  Values in these cells need not
+! :::        be set here.
+! ::: 
+! ::: INPUTS/OUTPUTS:
+! ::: 
+! ::: level     => amr level of grid
+! ::: time      => time at which to init data             
+! ::: lo,hi     => index limits of grid interior (cell centered)
+! ::: nscal     => number of scalar quantities.  You should know
+! :::		   this already!
+! ::: vel      <=  Velocity array
+! ::: scal     <=  Scalar array
+! ::: press    <=  Pressure array
+! ::: delta     => cell size
+! ::: xlo,xhi   => physical locations of lower left and upper
+! :::              right hand corner of grid.  (does not include
+! :::		   ghost region).
+! ::: -----------------------------------------------------------
 
   subroutine init_data(level,time,lo,hi,nscal, &
-     	 	               vel,scal,DIMS(state),press,DIMS(press), &
-                       delta,xlo,xhi) &
-                       bind(C, name="init_data")
-                       
-      use chem_driver, only: P1ATMMKS
-      use chem_driver_3D, only: RHOfromPTY, HMIXfromTY
-      use chem_driver, only: get_spec_name
+                           vel,scal,DIMS(state),press,DIMS(press), &
+                           delta,xlo,xhi) &
+                           bind(C, name="init_data")
+
+      use network,   only: nspec
+      use PeleLM_F,  only: pphys_getP1atm_MKS, pphys_get_spec_name2
+      use PeleLM_3D, only: pphys_RHOfromPTY, pphys_HMIXfromTY
       
       implicit none
-      integer    level,nscal
+      integer    level, nscal
       integer    lo(SDIM), hi(SDIM)
       integer    DIMDEC(state)
       integer    DIMDEC(press)
@@ -905,6 +1042,7 @@ contains
       REAL_T     vel(DIMV(state),SDIM)
       REAL_T    scal(DIMV(state),nscal)
       REAL_T   press(DIMV(press))
+      integer tmpi, nPMF
 
 #include <cdwrk.H>
 #include <conp.H>
@@ -915,10 +1053,22 @@ contains
 #include <INFL_FORCE_F.H>
 #endif
 
-      integer i, j, k, n, etZone, nPMF, len
-      REAL_T x, y, z, Yl(maxspec), Xl(maxspec), Patm
-      REAL_T pmf_vals(maxspec+3), y1, y2
-      REAL_T pert,Lx,Ly,FORT_P1ATMMKS
+      integer i, j, k, n, airZone, fuelZone, zone
+      REAL_T x, y, z, r, Yl(maxspec), Xl(maxspec), Patm
+      REAL_T pmf_vals(maxspec+3), y1, y2, dx
+      REAL_T pert,Lx,Ly,eta,u,v,rho,T,h
+      REAL_T sigma
+
+      integer rnseed
+      REAL_T flameX, flameZ, fDist, atfa, beta, pDist, rn, stdfac
+
+      integer iO2,iCO2,iH2O,iCH3OCH3,len
+      character*(maxspnml) name
+
+!      write(6,*)" made it to initdata"
+      if (bathID.lt.1 .or. bathID.gt.Nspec) then
+         call bl_pd_abort()
+      endif
 
       len = len_trim(probtype)
            
@@ -942,7 +1092,7 @@ contains
                                    + 1.023 * sin(2*Pi*2*(x-.004598)/Lx)   * sin(2*Pi*4*(y-.0053765)/Ly) &
                                    + 0.945 * sin(2*Pi*3*(x-.00712435)/Lx) * sin(2*Pi*3*(y-.02137)/Ly)  &
                                    + 1.017 * sin(2*Pi*5*(x-.0033)/Lx)     * sin(2*Pi*6*(y-.018)/Ly)  &
-                                               + .982 * sin(2*Pi*5*(x-.014234)/Lx) )
+                                   + .982 * sin(2*Pi*5*(x-.014234)/Lx) )
                   endif
 
                   y1 = (z - standoff - 0.5d0*delta(3) + pert)*100.d0
@@ -973,6 +1123,80 @@ contains
                end do
             end do
          end do
+
+      else if (probtype(1:len).eq.BL_PROB_PREMIXED_OSCILLATOR) then 
+
+!c     put some crap in the random number generator
+         rnseed = 11*(lo(1)+3) + 13*(lo(2)+5) + 17*(lo(3)+7)
+         call blutilinitrand(rnseed)
+         call blutilrand(rn)
+
+         do k = lo(3), hi(3)
+            z = (float(k)+.5d0)*delta(3)+domnlo(3) 
+            do j = lo(2), hi(2)
+               y = (float(j)+.5d0)*delta(2)+domnlo(2)
+               do i = lo(1), hi(1)
+                  x = (float(i)+.5d0)*delta(1)+domnlo(1)
+
+!c     Hack out initial V, but put something at the inlet to get it going
+!c     Change this condition to .true. to get the V
+!c               if (j.eq.domnlo(2)) then
+                  if (.true.) then 
+!c     This bit puts in an initial V with a perturbation
+                     atfa = 1.d0/atan(2.d0*Pi*flameAngle/180.d0)
+                     atfa = 1.d0/9.9d0
+                     beta = atfa/(1+atfa*atfa) * (y+atfa*abs(x))
+                     flameX = beta
+                     flameZ = flameX/atfa
+                     fDist = sqrt( (abs(x)-flameX)**2 + (z-flameZ)**2 )
+                     if (z.lt.flameZ) then
+                        fDist = fDist*(-1.d0)
+                     endif
+                  
+                     pDist = sqrt(flameX**2+flameZ**2)
+                     pert = 0.d0
+                     if (pertmag .gt. 0.d0) then
+                        Lx = domnhi(1) - domnlo(1)
+                        pert = pertmag*sin(2*Pi*float(pertmode)*pDist/Lx)
+                     endif
+                  
+                     y1 = (fDist - standoff - 0.5d0*delta(2) + pert)*100.d0
+                     y2 = (fDist - standoff + 0.5d0*delta(2) + pert)*100.d0
+                  else
+!c     hack: just pull out fuel conditions from PMF file, 
+                     y1=-1.d10
+                     y2=y1+delta(2)
+                  endif
+
+                  call pmf(y1,y2,pmf_vals,nPMF)               
+                  if (nPMF.ne.Nspec+3) then
+                     call bl_abort('INITDATA: n .ne. Nspec+3')
+                  endif
+               
+                  call blutilrand(rn)
+                  scal(i,j,k,Temp) = pmf_vals(1) + initPertScale*(two*rn-one)*T_in*stdfac
+
+                  do n = 1,Nspec
+                     Xl(n) = pmf_vals(3+n)
+                  end do 
+               
+                  CALL CKXTY (Xl,Yl)
+               
+                  do n = 1,Nspec
+                     scal(i,j,k,FirstSpec+n-1) = Yl(n)
+                  end do
+
+                  scal(i,j,k,Trac) = 0.d0
+
+                  call blutilrand(rn)
+                  vel(i,j,k,1) = 0.d0 + initPertScale*(two*rn-one)*V_in*stdfac
+                  call blutilrand(rn)
+                  vel(i,j,k,2) = 0.d0 + initPertScale*(two*rn-one)*V_in*stdfac
+                  call blutilrand(rn)
+                  vel(i,j,k,3) = pmf_vals(2)*1.d-2 + initPertScale*(two*rn-one)*V_in*stdfac
+               end do
+            end do
+         end do
          
       else
 
@@ -986,15 +1210,15 @@ contains
 
       endif
 
-      Patm = pamb / P1ATMMKS()
+      Patm = pamb / pphys_getP1atm_MKS()
 
-      call RHOfromPTY(lo,hi, &
+      call pphys_RHOfromPTY(lo,hi, &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),Density),  DIMS(state), &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),Temp),     DIMS(state), &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),FirstSpec),DIMS(state), &
           Patm)
 
-      call HMIXfromTY(lo,hi, &
+      call pphys_HMIXfromTY(lo,hi, &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),RhoH),     DIMS(state), &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),Temp),     DIMS(state), &
           scal(ARG_L1(state),ARG_L2(state),ARG_L3(state),FirstSpec),DIMS(state))
@@ -1032,33 +1256,34 @@ contains
       enddo
       
   end subroutine init_data
-  
-!c ::: -----------------------------------------------------------
-!c ::: This routine will zero out diffusivity on portions of the
-!c ::: boundary that are inflow, allowing that a "wall" block
-!c ::: the complement aperture
-!c ::: 
-!c ::: INPUTS/OUTPUTS:
-!c ::: 
-!c ::: diff      <=> diffusivity on edges
-!c ::: DIMS(diff) => index extent of diff array
-!c ::: lo,hi      => region of interest, edge-based
-!c ::: domlo,hi   => index extent of problem domain, edge-based
-!c ::: dx         => cell spacing
-!c ::: problo     => phys loc of lower left corner of prob domain
-!c ::: bc         => boundary condition flag (on orient)
-!c :::                   in BC_TYPES::physicalBndryTypes
-!c ::: idir       => which face, 0=x, 1=y
-!c ::: isrz       => 1 if problem is r-z
-!c ::: id         => index of state, 0=u
-!c ::: ncomp      => components to modify
-!c ::: 
-!c ::: -----------------------------------------------------------
+      
+! ::: -----------------------------------------------------------
+! ::: This routine will zero out diffusivity on portions of the
+! ::: boundary that are inflow, allowing that a "wall" block
+! ::: the complement aperture
+! ::: 
+! ::: INPUTS/OUTPUTS:
+! ::: 
+! ::: diff      <=> diffusivity on edges
+! ::: DIMS(diff) => index extent of diff array
+! ::: lo,hi      => region of interest, edge-based
+! ::: domlo,hi   => index extent of problem domain, edge-based
+! ::: dx         => cell spacing
+! ::: problo     => phys loc of lower left corner of prob domain
+! ::: bc         => boundary condition flag (on orient)
+! :::                   in BC_TYPES::physicalBndryTypes
+! ::: idir       => which face, 0=x, 1=y
+! ::: isrz       => 1 if problem is r-z
+! ::: id         => index of state, 0=u
+! ::: ncomp      => components to modify
+! ::: 
+! ::: -----------------------------------------------------------
 
-subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
-                     dx,problo,bc,idir,isrz,id,ncomp)  &
-                     bind(C, name="zero_visc")   
-                                          
+  subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
+                           dx,problo,bc,idir,isrz,id,ncomp) &
+                           bind(C, name="zero_visc")   
+                      
+                              
       implicit none
       integer DIMDEC(diff)
       integer lo(SDIM), hi(SDIM)
@@ -1093,7 +1318,8 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
          do_Y = (ye - ys + 1) .GE. 1
 !     
 !     Do species, Temp, rhoH
-!     
+!
+
          if ((idir.EQ.2) .AND. (lo(3) .LE. domlo(3)) &
                 .AND. (do_T .OR. do_RH .OR. do_Y) ) then
                
@@ -1105,6 +1331,7 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
                   xl = float(i)*dx(1)+domnlo(1) 
                   xr = (float(i)+1.d0)*dx(1)+domnlo(1) 
                   xh = 0.5d0*(xl+xr)
+
                   yb = float(j)*dx(2)+domnlo(2) 
                   yt = (float(j)+1.d0)*dx(2)+domnlo(2) 
                   yh = 0.5d0*(yb+yt)
@@ -1141,33 +1368,34 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
             end do
          endif
       end if
+      
   end subroutine zero_visc
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine will tag high error cells based on the 
-!c ::: density gradient
-!c ::: 
-!c ::: INPUTS/OUTPUTS:
-!c ::: 
-!c ::: tag      <=  integer tag array
-!c ::: DIMS(tag) => index extent of tag array
-!c ::: set       => integer value to tag cell for refinement
-!c ::: clear     => integer value to untag cell
-!c ::: rho       => density array
-!c ::: DIMS(rho) => index extent of rho array
-!c ::: lo,hi     => index extent of grid
-!c ::: nvar      => number of components in rho array (should be 1)
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: dx        => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::	           corner of tag array
-!c ::: problo    => phys loc of lower left corner of prob domain
-!c ::: time      => problem evolution time
-!c ::: -----------------------------------------------------------
+! ::: -----------------------------------------------------------
+! ::: This routine will tag high error cells based on the 
+! ::: density gradient
+! ::: 
+! ::: INPUTS/OUTPUTS:
+! ::: 
+! ::: tag      <=  integer tag array
+! ::: DIMS(tag) => index extent of tag array
+! ::: set       => integer value to tag cell for refinement
+! ::: clear     => integer value to untag cell
+! ::: rho       => density array
+! ::: DIMS(rho) => index extent of rho array
+! ::: lo,hi     => index extent of grid
+! ::: nvar      => number of components in rho array (should be 1)
+! ::: domlo,hi  => index extent of problem domain
+! ::: dx        => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::	           corner of tag array
+! ::: problo    => phys loc of lower left corner of prob domain
+! ::: time      => problem evolution time
+! ::: -----------------------------------------------------------
 
   subroutine FORT_DENERROR (tag,DIMS(tag),set,clear, &
-                            rho,DIMS(rho),lo,hi,nvar, &
-                            domlo,domhi,dx,xlo, &
+                               rho,DIMS(rho),lo,hi,nvar, &
+                               domlo,domhi,dx,xlo, &
                 		        problo,time,level) &
                              bind(C, name="FORT_DENERROR")
                                
@@ -1189,12 +1417,12 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 
 ! ::: -----------------------------------------------------------
 
-  subroutine flame_tracer_error(tag,DIMS(tag),set,clear, &
-                                ftrac,DIMS(ftrac),lo,hi,nvar, &
-                                domlo,domhi,dx,xlo, &
-                 	              problo,time,level) &
-                                bind(C, name="flame_tracer_error")
-                                
+  subroutine flame_tracer_error (tag,DIMS(tag),set,clear, &
+                                 ftrac,DIMS(ftrac),lo,hi,nvar, &
+                                 domlo,domhi,dx,xlo, &
+     			              problo,time,level) &
+                                 bind(C, name="flame_tracer_error")
+
       implicit none
       integer   DIMDEC(ftrac)
       integer   DIMDEC(tag)
@@ -1222,33 +1450,32 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 
   end subroutine flame_tracer_error
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine will tag high error cells based on the 
-!c ::: density gradient
-!c ::: 
-!c ::: INPUTS/OUTPUTS:
-!c ::: 
-!c ::: tag      <=  integer tag array
-!c ::: DIMS(tag) => index extent of tag array
-!c ::: set       => integer value to tag cell for refinement
-!c ::: clear     => integer value to untag cell
-!c ::: adv       => scalar array
-!c ::: DIMS(adv) => index extent of scalar array
-!c ::: lo,hi     => index extent of grid
-!c ::: nvar      => number of components in rho array (should be 1)
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: dx        => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::	           corner of tag array
-!c ::: problo    => phys loc of lower left corner of prob domain
-!c ::: time      => problem evolution time
-!c ::: -----------------------------------------------------------
-
+! ::: -----------------------------------------------------------
+! ::: This routine will tag high error cells based on the 
+! ::: density gradient
+! ::: 
+! ::: INPUTS/OUTPUTS:
+! ::: 
+! ::: tag      <=  integer tag array
+! ::: DIMS(tag) => index extent of tag array
+! ::: set       => integer value to tag cell for refinement
+! ::: clear     => integer value to untag cell
+! ::: adv       => scalar array
+! ::: DIMS(adv) => index extent of scalar array
+! ::: lo,hi     => index extent of grid
+! ::: nvar      => number of components in rho array (should be 1)
+! ::: domlo,hi  => index extent of problem domain
+! ::: dx        => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::	           corner of tag array
+! ::: problo    => phys loc of lower left corner of prob domain
+! ::: time      => problem evolution time
+! ::: -----------------------------------------------------------
 
   subroutine adv_error (tag,DIMS(tag),set,clear, &
                         adv,DIMS(adv),lo,hi,nvar, &
                         domlo,domhi,delta,xlo, &
-          			        problo,time,level)&
+                        problo,time,level)&
                         bind(C, name="adv_error")
                   
       implicit none
@@ -1278,34 +1505,34 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       endif
       
   end subroutine adv_error
-  
-!c ::: -----------------------------------------------------------
-!c ::: This routine will tag high error cells based on the
-!c ::: temperature gradient
-!c :::
-!c ::: INPUTS/OUTPUTS:
-!c :::
-!c ::: tag      <=  integer tag array
-!c ::: DIMS(tag) => index extent of tag array
-!c ::: set       => integer value to tag cell for refinement
-!c ::: clear     => integer value to untag cell
-!c ::: temp      => density array
-!c ::: DIMS(temp)=> index extent of temp array
-!c ::: lo,hi     => index extent of grid
-!c ::: nvar      => number of components in rho array (should be 1)
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: dx        => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::              corner of tag array
-!c ::: problo    => phys loc of lower left corner of prob domain
-!c ::: time      => problem evolution time
-!c ::: -----------------------------------------------------------
 
-  subroutine temp_error(tag,DIMS(tag),set,clear, &
-                        temperature,DIMS(temp),lo,hi,nvar, &
-                        domlo,domhi,dx,xlo, &
-                        problo,time,level)&
-                        bind(C, name="temp_error")
+! ::: -----------------------------------------------------------
+! ::: This routine will tag high error cells based on the
+! ::: temperature gradient
+! :::
+! ::: INPUTS/OUTPUTS:
+! :::
+! ::: tag      <=  integer tag array
+! ::: DIMS(tag) => index extent of tag array
+! ::: set       => integer value to tag cell for refinement
+! ::: clear     => integer value to untag cell
+! ::: temp      => density array
+! ::: DIMS(temp)=> index extent of temp array
+! ::: lo,hi     => index extent of grid
+! ::: nvar      => number of components in rho array (should be 1)
+! ::: domlo,hi  => index extent of problem domain
+! ::: dx        => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::              corner of tag array
+! ::: problo    => phys loc of lower left corner of prob domain
+! ::: time      => problem evolution time
+! ::: -----------------------------------------------------------
+
+  subroutine temp_error (tag,DIMS(tag),set,clear, &
+                               temperature,DIMS(temp),lo,hi,nvar, &
+                               domlo,domhi,dx,xlo, &
+                               problo,time,level)&
+                               bind(C, name="temp_error")
                                
       implicit none
       integer   DIMDEC(tag)
@@ -1324,10 +1551,10 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       ng = min(ARG_H1(temp)-hi(1),ARG_H2(temp)-hi(2),ARG_H3(temp)-hi(3), &
               lo(1)-ARG_L1(temp),lo(2)-ARG_L2(temp),lo(3)-ARG_L3(temp))
 
-      if (ng .lt. 1) then
-         write(6,*) "TEMPERR cannot compute gradient, ng = ",ng
-         call bl_abort(" ")
-      endif
+!      if (ng .lt. 1) then
+!         write(6,*) "TEMPERR cannot compute gradient, ng = ",ng
+!         call bl_abort(" ")
+!      endif
 !
 !     ::::: refine where there is temperature gradient
 !
@@ -1335,14 +1562,14 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
          do k = lo(3), hi(3)
             do j = lo(2), hi(2)
                do i = lo(1), hi(1)
-!c                 ax = abs(temperature(i+1,j,k,1) - temperature(i,j,k,1))
-!c                 ay = abs(temperature(i,j+1,k,1) - temperature(i,j,k,1))
-!c                 az = abs(temperature(i,j,k+1,1) - temperature(i,j,k,1))
-!c                 ax = MAX(ax,abs(temperature(i,j,k,1) - temperature(i-1,j,k,1)))
-!c                 ay = MAX(ay,abs(temperature(i,j,k,1) - temperature(i,j-1,k,1)))
-!c                 az = MAX(az,abs(temperature(i,j,k,1) - temperature(i,j,k-1,1)))
-!c                 aerr = max(ax,ay,az)
-!c                 tag(i,j,k) = merge(set,tag(i,j,k),aerr.ge.tempgrad)
+!                 ax = abs(temperature(i+1,j,k,1) - temperature(i,j,k,1))
+!                 ay = abs(temperature(i,j+1,k,1) - temperature(i,j,k,1))
+!                 az = abs(temperature(i,j,k+1,1) - temperature(i,j,k,1))
+!                 ax = MAX(ax,abs(temperature(i,j,k,1) - temperature(i-1,j,k,1)))
+!                 ay = MAX(ay,abs(temperature(i,j,k,1) - temperature(i,j-1,k,1)))
+!                 az = MAX(az,abs(temperature(i,j,k,1) - temperature(i,j,k-1,1)))
+!                 aerr = max(ax,ay,az)
+!                 tag(i,j,k) = merge(set,tag(i,j,k),aerr.ge.tempgrad)
                   tag(i,j,k) = merge(set,tag(i,j,k),temperature(i,j,k,1).lt.temperr)
                enddo
             enddo
@@ -1351,32 +1578,32 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 
   end subroutine temp_error
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine will tag high error cells based on the 
-!c ::: magnitude of vorticity
-!c ::: 
-!c ::: INPUTS/OUTPUTS:
-!c ::: 
-!c ::: tag      <=  integer tag array
-!c ::: DIMS(tag) => index extent of tag array
-!c ::: set       => integer value to tag cell for refinement
-!c ::: clear     => integer value to untag cell
-!c ::: vort      => array of vorticity values
-!c ::: DIMS(vor) => index extent of vort array
-!c ::: nvar      => number of components in vort array (should be 1)
-!c ::: lo,hi     => index extent of grid
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: dx        => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::	           corner of tag array
-!c ::: problo    => phys loc of lower left corner of prob domain
-!c ::: time      => problem evolution time
-!c ::: -----------------------------------------------------------
+! ::: -----------------------------------------------------------
+! ::: This routine will tag high error cells based on the 
+! ::: magnitude of vorticity
+! ::: 
+! ::: INPUTS/OUTPUTS:
+! ::: 
+! ::: tag      <=  integer tag array
+! ::: DIMS(tag) => index extent of tag array
+! ::: set       => integer value to tag cell for refinement
+! ::: clear     => integer value to untag cell
+! ::: vort      => array of vorticity values
+! ::: DIMS(vor) => index extent of vort array
+! ::: nvar      => number of components in vort array (should be 1)
+! ::: lo,hi     => index extent of grid
+! ::: domlo,hi  => index extent of problem domain
+! ::: dx        => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::	           corner of tag array
+! ::: problo    => phys loc of lower left corner of prob domain
+! ::: time      => problem evolution time
+! ::: -----------------------------------------------------------
 
    subroutine mv_error (tag,DIMS(tag),set,clear, &
                         vort,DIMS(vort),lo,hi,nvar,  &
                         domlo,domhi,dx,xlo, &
-     			              problo,time,level)&
+                        problo,time,level)&
                         bind(C, name="mv_error")
                  
       implicit none
@@ -1406,33 +1633,33 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 
   end subroutine mv_error 
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine is called during a filpatch operation when
-!c ::: the patch to be filled falls outside the interior
-!c ::: of the problem domain.  You are requested to supply the
-!c ::: data outside the problem interior in such a way that the
-!c ::: data is consistant with the types of the boundary conditions
-!c ::: you specified in the C++ code.  
-!c ::: 
-!c ::: NOTE:  you can assume all interior cells have been filled
-!c :::        with valid data and that all non-interior cells have
-!c ::         have been filled with a large real number.
-!c ::: 
-!c ::: INPUTS/OUTPUTS:
-!c ::: 
-!c ::: den      <=  density array
-!c ::: DIMS(den) => index extent of den array
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: dx        => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::	           corner of den array
-!c ::: time      => problem evolution time
-!c ::: bc	=> array of boundary flags bc(BL_SPACEDIM,lo:hi)
-!c ::: -----------------------------------------------------------
+! ::: -----------------------------------------------------------
+! ::: This routine is called during a filpatch operation when
+! ::: the patch to be filled falls outside the interior
+! ::: of the problem domain.  You are requested to supply the
+! ::: data outside the problem interior in such a way that the
+! ::: data is consistant with the types of the boundary conditions
+! ::: you specified in the C++ code.  
+! ::: 
+! ::: NOTE:  you can assume all interior cells have been filled
+! :::        with valid data and that all non-interior cells have
+! ::         have been filled with a large real number.
+! ::: 
+! ::: INPUTS/OUTPUTS:
+! ::: 
+! ::: den      <=  density array
+! ::: DIMS(den) => index extent of den array
+! ::: domlo,hi  => index extent of problem domain
+! ::: dx        => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::	           corner of den array
+! ::: time      => problem evolution time
+! ::: bc	=> array of boundary flags bc(BL_SPACEDIM,lo:hi)
+! ::: -----------------------------------------------------------
 
   subroutine den_fill (den,DIMS(den),domlo,domhi,delta, &
-                       xlo,time,bc) &
-                       bind(C, name="den_fill")
+                              xlo,time,bc) &
+                              bind(C, name="den_fill")
                        
       implicit none
 
@@ -1446,9 +1673,9 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 #include <probdata.H>
       
       integer i, j, k
-      integer ilo, ihi, jlo, jhi, klo, khi
       REAL_T  z, y, x
       REAL_T  u, v, w, rho, Yl(0:maxspec-1), T, h
+      integer ilo, ihi, jlo, jhi, klo, khi
 
       integer lo(SDIM), hi(SDIM)
 
@@ -1554,29 +1781,29 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 
   end subroutine den_fill
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine is called during a filpatch operation when
-!c ::: the patch to be filled falls outside the interior
-!c ::: of the problem domain.  You are requested to supply the
-!c ::: data outside the problem interior in such a way that the
-!c ::: data is consistant with the types of the boundary conditions
-!c ::: you specified in the C++ code.  
-!c ::: 
-!c ::: NOTE:  you can assume all interior cells have been filled
-!c :::        with valid data and that all non-interior cells have
-!c ::         have been filled with a large real number.
-!c ::: 
-!c ::: INPUTS/OUTPUTS:
-!c ::: 
-!c ::: adv      <=  advected quantity array
-!c ::: DIMS(adv) => index extent of adv array
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: dx        => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::	           corner of adv array
-!c ::: time      => problem evolution time
-!c ::: bc	=> array of boundary flags bc(BL_SPACEDIM,lo:hi)
-!c ::: -----------------------------------------------------------
+! ::: -----------------------------------------------------------
+! ::: This routine is called during a filpatch operation when
+! ::: the patch to be filled falls outside the interior
+! ::: of the problem domain.  You are requested to supply the
+! ::: data outside the problem interior in such a way that the
+! ::: data is consistant with the types of the boundary conditions
+! ::: you specified in the C++ code.  
+! ::: 
+! ::: NOTE:  you can assume all interior cells have been filled
+! :::        with valid data and that all non-interior cells have
+! ::         have been filled with a large real number.
+! ::: 
+! ::: INPUTS/OUTPUTS:
+! ::: 
+! ::: adv      <=  advected quantity array
+! ::: DIMS(adv) => index extent of adv array
+! ::: domlo,hi  => index extent of problem domain
+! ::: dx        => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::	           corner of adv array
+! ::: time      => problem evolution time
+! ::: bc	=> array of boundary flags bc(BL_SPACEDIM,lo:hi)
+! ::: -----------------------------------------------------------
 
   subroutine adv_fill (adv,DIMS(adv),domlo,domhi,delta,xlo,time,bc)&
                            bind(C, name="adv_fill")
@@ -1609,36 +1836,37 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
                enddo
             enddo
          enddo
-      endif    
+      endif
 
   end subroutine adv_fill
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine is called during a filpatch operation when
-!c ::: the patch to be filled falls outside the interior
-!c ::: of the problem domain.  You are requested to supply the
-!c ::: data outside the problem interior in such a way that the
-!c ::: data is consistant with the types of the boundary conditions
-!c ::: you specified in the C++ code.
-!c :::
-!c ::: NOTE:  you can assume all interior cells have been filled
-!c :::        with valid data.
-!c :::
-!c ::: INPUTS/OUTPUTS:
-!c :::
-!c ::: temp     <=  temperature array
-!c ::: lo,hi     => index extent of adv array
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: delta     => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::              corner of temperature array
-!c ::: time      => problem evolution time
-!c ::: bc        => array of boundary flags bc(BL_SPACEDIM,lo:hi)
-!c ::: -----------------------------------------------------------
 
-      subroutine temp_fill  (temp,DIMS(temp),domlo,domhi,delta, &
-                             xlo,time,bc) &
-                             bind(C, name="temp_fill")
+! ::: -----------------------------------------------------------
+! ::: This routine is called during a filpatch operation when
+! ::: the patch to be filled falls outside the interior
+! ::: of the problem domain.  You are requested to supply the
+! ::: data outside the problem interior in such a way that the
+! ::: data is consistant with the types of the boundary conditions
+! ::: you specified in the C++ code.
+! :::
+! ::: NOTE:  you can assume all interior cells have been filled
+! :::        with valid data.
+! :::
+! ::: INPUTS/OUTPUTS:
+! :::
+! ::: temp     <=  temperature array
+! ::: lo,hi     => index extent of adv array
+! ::: domlo,hi  => index extent of problem domain
+! ::: delta     => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::              corner of temperature array
+! ::: time      => problem evolution time
+! ::: bc        => array of boundary flags bc(BL_SPACEDIM,lo:hi)
+! ::: -----------------------------------------------------------
+
+      subroutine temp_fill (temp,DIMS(temp),domlo,domhi,delta, &
+                              xlo,time,bc) &
+                              bind(C, name="temp_fill")
 
       implicit none
 
@@ -1652,9 +1880,9 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 #include <probdata.H>
       
       integer i, j, k
-      integer ilo, ihi, jlo, jhi, klo, khi
       REAL_T  z, y, x
       REAL_T  u, v, w, rho, Yl(0:maxspec-1), T, h
+      integer ilo, ihi, jlo, jhi, klo, khi
 
       integer lo(SDIM), hi(SDIM)
 
@@ -1760,32 +1988,32 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 
   end subroutine temp_fill
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine is called during a filpatch operation when
-!c ::: the patch to be filled falls outside the interior
-!c ::: of the problem domain.  You are requested to supply the
-!c ::: data outside the problem interior in such a way that the
-!c ::: data is consistant with the types of the boundary conditions
-!c ::: you specified in the C++ code.
-!c :::
-!c ::: NOTE:  you can assume all interior cells have been filled
-!c :::        with valid data.
-!c :::
-!c ::: INPUTS/OUTPUTS:
-!c :::
-!c ::: rhoh      <=  rho*h array
-!c ::: lo,hi     => index extent of adv array
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: delta     => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::              corner of temperature array
-!c ::: time      => problem evolution time
-!c ::: bc        => array of boundary flags bc(BL_SPACEDIM,lo:hi)
-!c ::: -----------------------------------------------------------
+! ::: -----------------------------------------------------------
+! ::: This routine is called during a filpatch operation when
+! ::: the patch to be filled falls outside the interior
+! ::: of the problem domain.  You are requested to supply the
+! ::: data outside the problem interior in such a way that the
+! ::: data is consistant with the types of the boundary conditions
+! ::: you specified in the C++ code.
+! :::
+! ::: NOTE:  you can assume all interior cells have been filled
+! :::        with valid data.
+! :::
+! ::: INPUTS/OUTPUTS:
+! :::
+! ::: rhoh      <=  rho*h array
+! ::: lo,hi     => index extent of adv array
+! ::: domlo,hi  => index extent of problem domain
+! ::: delta     => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::              corner of temperature array
+! ::: time      => problem evolution time
+! ::: bc        => array of boundary flags bc(BL_SPACEDIM,lo:hi)
+! ::: -----------------------------------------------------------
 
-  subroutine rhoh_fill  (rhoh,DIMS(rhoh),domlo,domhi,delta, &
-                         xlo,time,bc)&
-                         bind(C, name="rhoh_fill")
+  subroutine rhoh_fill (rhoh,DIMS(rhoh),domlo,domhi,delta, &
+                              xlo,time,bc)&
+                              bind(C, name="rhoh_fill")
 
       implicit none
 
@@ -1799,9 +2027,9 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 #include <probdata.H>
       
       integer i, j, k
-      integer ilo, ihi, jlo, jhi, klo, khi
       REAL_T  z, y, x
       REAL_T  u, v, w, rho, Yl(0:maxspec-1), T, h
+      integer ilo, ihi, jlo, jhi, klo, khi
 
       integer lo(SDIM), hi(SDIM)
 
@@ -2265,28 +2493,28 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 
   end subroutine vel_fill
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine is called during a filpatch operation when
-!c ::: the patch to be filled falls outside the interior
-!c ::: of the problem domain.  You are requested to supply the
-!c ::: data outside the problem interior in such a way that the
-!c ::: data is consistant with the types of the boundary conditions
-!c ::: you specified in the C++ code.  
-!c ::: 
-!c ::: NOTE:  you can assume all interior cells have been filled
-!c :::        with valid data.
-!c ::: 
-!c ::: INPUTS/OUTPUTS:
-!c ::: 
-!c ::: xvel     <=  x velocity array
-!c ::: lo,hi     => index extent of xvel array
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: delta     => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::	           corner of rho array
-!c ::: time      => problem evolution time
-!c ::: bc	=> array of boundary flags bc(BL_SPACEDIM,lo:hi)
-!c ::: -----------------------------------------------------------
+! ::: -----------------------------------------------------------
+! ::: This routine is called during a filpatch operation when
+! ::: the patch to be filled falls outside the interior
+! ::: of the problem domain.  You are requested to supply the
+! ::: data outside the problem interior in such a way that the
+! ::: data is consistant with the types of the boundary conditions
+! ::: you specified in the C++ code.  
+! ::: 
+! ::: NOTE:  you can assume all interior cells have been filled
+! :::        with valid data.
+! ::: 
+! ::: INPUTS/OUTPUTS:
+! ::: 
+! ::: xvel     <=  x velocity array
+! ::: lo,hi     => index extent of xvel array
+! ::: domlo,hi  => index extent of problem domain
+! ::: delta     => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::	           corner of rho array
+! ::: time      => problem evolution time
+! ::: bc	=> array of boundary flags bc(BL_SPACEDIM,lo:hi)
+! ::: -----------------------------------------------------------
 
       subroutine FORT_XVELFILL (xvel,DIMS(xvel),domlo,domhi,delta, &
                                 xlo,time,bc)&
@@ -2495,28 +2723,28 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
       
   end subroutine FORT_XVELFILL
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine is called during a filpatch operation when
-!c ::: the patch to be filled falls outside the interior
-!c ::: of the problem domain.  You are requested to supply the
-!c ::: data outside the problem interior in such a way that the
-!c ::: data is consistant with the types of the boundary conditions
-!c ::: you specified in the C++ code.  
-!c ::: 
-!c ::: NOTE:  you can assume all interior cells have been filled
-!c :::        with valid data.
-!c ::: 
-!c ::: INPUTS/OUTPUTS:
-!c ::: 
-!c ::: yvel     <=  y velocity array
-!c ::: lo,hi     => index extent of yvel array
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: delta     => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::	           corner of rho array
-!c ::: time      => problem evolution time
-!c ::: bc	=> array of boundary flags bc(BL_SPACEDIM,lo:hi)
-!c ::: -----------------------------------------------------------
+! ::: -----------------------------------------------------------
+! ::: This routine is called during a filpatch operation when
+! ::: the patch to be filled falls outside the interior
+! ::: of the problem domain.  You are requested to supply the
+! ::: data outside the problem interior in such a way that the
+! ::: data is consistant with the types of the boundary conditions
+! ::: you specified in the C++ code.  
+! ::: 
+! ::: NOTE:  you can assume all interior cells have been filled
+! :::        with valid data.
+! ::: 
+! ::: INPUTS/OUTPUTS:
+! ::: 
+! ::: yvel     <=  y velocity array
+! ::: lo,hi     => index extent of yvel array
+! ::: domlo,hi  => index extent of problem domain
+! ::: delta     => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::	           corner of rho array
+! ::: time      => problem evolution time
+! ::: bc	=> array of boundary flags bc(BL_SPACEDIM,lo:hi)
+! ::: -----------------------------------------------------------
 
       subroutine FORT_YVELFILL (yvel,DIMS(yvel),domlo,domhi,delta,&
                                 xlo,time,bc)&
@@ -2725,28 +2953,28 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 
   end subroutine FORT_YVELFILL
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine is called during a filpatch operation when
-!c ::: the patch to be filled falls outside the interior
-!c ::: of the problem domain.  You are requested to supply the
-!c ::: data outside the problem interior in such a way that the
-!c ::: data is consistant with the types of the boundary conditions
-!c ::: you specified in the C++ code.  
-!c ::: 
-!c ::: NOTE:  you can assume all interior cells have been filled
-!c :::        with valid data.
-!c ::: 
-!c ::: INPUTS/OUTPUTS:
-!c ::: 
-!c ::: zvel     <=  z velocity array
-!c ::: lo,hi     => index extent of zvel array
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: delta     => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::	           corner of rho array
-!c ::: time      => problem evolution time
-!c ::: bc	=> array of boundary flags bc(BL_SPACEDIM,lo:hi)
-!c ::: -----------------------------------------------------------
+! ::: -----------------------------------------------------------
+! ::: This routine is called during a filpatch operation when
+! ::: the patch to be filled falls outside the interior
+! ::: of the problem domain.  You are requested to supply the
+! ::: data outside the problem interior in such a way that the
+! ::: data is consistant with the types of the boundary conditions
+! ::: you specified in the C++ code.  
+! ::: 
+! ::: NOTE:  you can assume all interior cells have been filled
+! :::        with valid data.
+! ::: 
+! ::: INPUTS/OUTPUTS:
+! ::: 
+! ::: zvel     <=  z velocity array
+! ::: lo,hi     => index extent of zvel array
+! ::: domlo,hi  => index extent of problem domain
+! ::: delta     => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::	           corner of rho array
+! ::: time      => problem evolution time
+! ::: bc	=> array of boundary flags bc(BL_SPACEDIM,lo:hi)
+! ::: -----------------------------------------------------------
 
       subroutine FORT_ZVELFILL (zvel,DIMS(zvel),domlo,domhi,delta, &
                                 xlo,time,bc) &
@@ -2954,6 +3182,8 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
                            xlo,time,bc) &
                            bind(C, name="all_chem_fill")
 
+      use network,  only: nspec
+
       implicit none
 
 #include <cdwrk.H>
@@ -3091,29 +3321,29 @@ subroutine zero_visc(diff,DIMS(diff),lo,hi,domlo,domhi, &
 
   end subroutine all_chem_fill
 
-!c ::: -----------------------------------------------------------
-!c ::: This routine is called during a filpatch operation when
-!c ::: the patch to be filled falls outside the interior
-!c ::: of the problem domain.  You are requested to supply the
-!c ::: data outside the problem interior in such a way that the
-!c ::: data is consistant with the types of the boundary conditions
-!c ::: you specified in the C++ code.
-!c :::
-!c ::: NOTE:  you can assume all interior cells have been filled
-!c :::        with valid data.
-!c :::
-!c ::: INPUTS/OUTPUTS:
-!c :::
-!c ::: rhoY      <= rho*Y (Y=mass fraction) array
-!c ::: lo,hi     => index extent of adv array
-!c ::: domlo,hi  => index extent of problem domain
-!c ::: delta     => cell spacing
-!c ::: xlo       => physical location of lower left hand
-!c :::              corner of temperature array
-!c ::: time      => problem evolution time
-!c ::: bc        => array of boundary flags bc(BL_SPACEDIM,lo:hi)
-!c ::: stateID   => id index of state being filled
-!c ::: -----------------------------------------------------------
+! ::: -----------------------------------------------------------
+! ::: This routine is called during a filpatch operation when
+! ::: the patch to be filled falls outside the interior
+! ::: of the problem domain.  You are requested to supply the
+! ::: data outside the problem interior in such a way that the
+! ::: data is consistant with the types of the boundary conditions
+! ::: you specified in the C++ code.
+! :::
+! ::: NOTE:  you can assume all interior cells have been filled
+! :::        with valid data.
+! :::
+! ::: INPUTS/OUTPUTS:
+! :::
+! ::: rhoY      <= rho*Y (Y=mass fraction) array
+! ::: lo,hi     => index extent of adv array
+! ::: domlo,hi  => index extent of problem domain
+! ::: delta     => cell spacing
+! ::: xlo       => physical location of lower left hand
+! :::              corner of temperature array
+! ::: time      => problem evolution time
+! ::: bc        => array of boundary flags bc(BL_SPACEDIM,lo:hi)
+! ::: stateID   => id index of state being filled
+! ::: -----------------------------------------------------------
 
   subroutine chem_fill  (rhoY,DIMS(rhoY),domlo,domhi,delta, &
                          xlo,time,bc,id) &
