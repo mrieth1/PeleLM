@@ -181,6 +181,10 @@ int  PeleLM::ef_PoissonMaxIter;
 int  PeleLM::ef_PoissonVerbose;
 int  PeleLM::ef_PoissonMaxOrder;
 int  PeleLM::ef_max_NK_ite;
+Real PeleLM::ef_lambda_jfnk;
+int  PeleLM::ef_max_GMRES_rst;
+Real PeleLM::ef_GMRES_reltol;
+int  PeleLM::ef_GMRES_size;
 #endif  
 
 static

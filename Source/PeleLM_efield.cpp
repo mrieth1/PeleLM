@@ -13,13 +13,13 @@ void PeleLM::ef_calc_transport(Real time) {
 	BL_ASSERT(whichTime == AmrOldTime || whichTime == AmrNewTime);
 
 //	Get ptr to current version of diff	
-	MultiFab&  diff            = (whichTime == AmrOldTime) ? (*diffn_cc) : (*diffnp1_cc);
+	MultiFab&  diff      = (whichTime == AmrOldTime) ? (*diffn_cc) : (*diffnp1_cc);
    const int nGrow      = diff.nGrow();
  
 //	A few check on the grow size of EF transport properties
    BL_ASSERT(kappaSpec_cc.nGrow() >= nGrow);
    BL_ASSERT(kappaElec_cc.nGrow() >= nGrow);
-   BL_ASSERT(diffElec_cc.nGrow() >= nGrow);
+   BL_ASSERT(diffElec_cc.nGrow()  >= nGrow);
 
 //	FillPatchIterator for State_type variables. Is it necessary ? For specs, it's been done before for 
 //	other transport properties
@@ -65,21 +65,31 @@ void PeleLM::ef_calc_transport(Real time) {
                          Kpefab.dataPtr(),   ARLIM(Kpefab.loVect()),   ARLIM(Kpefab.hiVect()),
 							    Diffefab.dataPtr(), ARLIM(Diffefab.loVect()), ARLIM(Diffefab.hiVect()));
   }
-	showMF("pnp",diffElec_cc,"pnp_De_cc",level);
-	showMF("pnp",kappaElec_cc,"pnp_Ke_cc",level);
 }
 
 void PeleLM::ef_define_data() {
    kappaSpec_cc.define(grids,dmap,nspecies,1);
    kappaElec_cc.define(grids,dmap,1,1);
    diffElec_cc.define(grids,dmap,1,1);
+	kappaElec_ec = 0;
+	diffElec_ec  = 0;
 
-	pnp_U.define(grids,dmap,2,1);
-	pnp_res.define(grids,dmap,2,1);
 	pnp_dU.define(grids,dmap,2,1);
 	pnp_bgchrg.define(grids,dmap,1,1);
+	pnp_gdnv.define(grids,dmap,1,1);
+	pnp_nE_old.define(grids,dmap,2,1);
+	pnp_refGC.define(grids,dmap,2,Godunov::hypgrow());
 
-	pnp_Ueff = new MultiFab[BL_SPACEDIM];
+	pnp_Ueff = new MultiFab[AMREX_SPACEDIM];
+   for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+		const BoxArray& edgeba = getEdgeBoxArray(d);
+	   pnp_Ueff[d].define(edgeba,dmap, 1,1);
+	}
+
+	pnp_SFne = 1.0;
+	pnp_SFphiV = 1.0;
+	pnp_SUne = 1.0;
+	pnp_SUphiV = 1.0;
 }
 
 void PeleLM::ef_solve_phiv(Real time) {
@@ -110,7 +120,6 @@ void PeleLM::ef_solve_phiv(Real time) {
 					          rhoY.dataPtr(first_spec), ARLIM(rhoY.loVect()),   ARLIM(rhoY.hiVect()),
 					          ne.dataPtr(nE),           ARLIM(ne.loVect()),     ARLIM(ne.hiVect()));
    }
-	showMF("pnp",rhs_poisson,"pnp_rhspoisson",level);
 
 // Set-up solver tolerances
    const Real S_tol     = ef_phiV_tol;
@@ -140,7 +149,6 @@ void PeleLM::ef_solve_phiv(Real time) {
 	mlmg.setVerbose(ef_PoissonVerbose);
 //	mlmg.setBottomVerbose(bottom_verbose);
 
-
 // Actual solve
 	mlmg.solve({&PhiV_alias}, {&rhs_poisson}, S_tol, S_tol_abs);
 
@@ -158,6 +166,10 @@ void PeleLM::ef_init() {
    PeleLM::ef_PoissonVerbose			 = 1;
    PeleLM::ef_PoissonMaxOrder			 = 4;
 	PeleLM::ef_max_NK_ite             = 20;
+	PeleLM::ef_lambda_jfnk				 = 1.0e-7;
+	PeleLM::ef_max_GMRES_rst			 = 50;
+	PeleLM::ef_GMRES_reltol  			 = 1.0e-10;
+	PeleLM::ef_GMRES_size			    = 30;
 
 	ParmParse pp("ef");
 
@@ -165,6 +177,10 @@ void PeleLM::ef_init() {
 	pp.query("MG_verbose",ef_PoissonVerbose);
 	pp.query("MG_maxorder",ef_PoissonMaxOrder);
 	pp.query("MG_PhiV_tol",ef_phiV_tol);
+	pp.query("JFNK_lambda",ef_lambda_jfnk);
+	pp.query("GMRES_max_restart",ef_max_GMRES_rst);
+	pp.query("GMRES_rel_tol",ef_GMRES_reltol);
+	pp.query("GMRES_restart_size",ef_GMRES_size);
 }
 
 
@@ -176,79 +192,108 @@ void PeleLM::ef_solve_PNP(Real dt,
 
 	BL_PROFILE("EF::ef_solve_PNP()");
 
-// Get edge-averaged transport properties	
-   FluxBoxes diff_e(this, 1, 0);
-   FluxBoxes conv_e(this, 1, 0);
-   MultiFab** kappaElec_ec = conv_e.get();
-   MultiFab** diffElec_ec = diff_e.get();
+//	TODO: Compute the old diffusion term for the Godunov Forcing
+   pnp_gdnv.setVal(0.0);	
+
+// Get edge-averaged transport properties. Edge data is "shared"
+   FluxBoxes diff_e(this, 1, 1);
+   FluxBoxes conv_e(this, 1, 1);
+   kappaElec_ec = conv_e.get();
+   diffElec_ec = diff_e.get();
    ef_get_edge_transport(kappaElec_ec, diffElec_ec); 
 
-// Copy some stuff ? Need: macvel, Diff_e, Kp_e, SDC_force, Godunov_force	
-// Need the old version of nE
-// Need to store the GC of the old version. PNP solved only for interior points
+// TODO: Need to store the GC of the old version. PNP solved only for interior points
+// Or do I ?
 
-// Get PNP components  	
+// Define and get PNP components
 	MultiFab&  S = get_new_data(State_Type);
 	MultiFab&  S_old = get_old_data(State_Type);
-	MultiFab nE_old_alias(S_old,amrex::make_alias,nE,1);
+	MultiFab::Copy(pnp_nE_old,S_old,nE,0,1,1);
 
-	MultiFab::Copy(pnp_U, S, nE, 0, 2, 1);
-// Get X scale matrix data : TypValue of nE and PhiV
+//	Define a FPI to get the (max) GC used throughout the PNP resolution
+//	I'll need at most 4 GC for the Godunov stuff
+	FillPatchIterator nEfpi(*this,S,Godunov::hypgrow(),time,State_Type,nE,2);
+	MultiFab& nEfpi_mf = nEfpi.get_mf();
+	MultiFab::Copy(pnp_refGC, nEfpi_mf, 0, 0, 2, Godunov::hypgrow());
+
+// GC of pnp_U init with the GC from S. Should'nt change during PNP solve ...	
+	MultiFab pnp_U(grids,dmap,2,Godunov::hypgrow());
+	MultiFab pnp_res(grids,dmap,2,Godunov::hypgrow());
+	MultiFab::Copy(pnp_U, pnp_refGC, 0, 0, 2, Godunov::hypgrow());
+
+// Get the NL vector scaling and scale
+	pnp_SUne = pnp_U.norm0(0);
+	pnp_SUphiV = pnp_U.norm0(1);
+   pnp_U.mult(1.0/pnp_SUne,0,1);	
+   pnp_U.mult(1.0/pnp_SUphiV,1,1);	
+	amrex::Print() << " ne scaling: " << pnp_SUne << "\n";
+	amrex::Print() << " PhiV scaling: " << pnp_SUphiV << "\n";
+
+//	Vector<Real> norm_NL_U0(2);
+	const Real norm_NL_U0 = ef_NL_norm(pnp_U); 
 
 // Compute provisional CD
    ef_bg_chrg(dt, Dn, Dnp1, Dhat);
 
 // Pre-Newton stuff	
-// Get a MF for just nE and PhiV ?
-// Get the initial residuals
-   ef_NL_residual( nE_old_alias, kappaElec_ec, diffElec_ec, dt );
-   const Real norm_NL_res0 = ef_NL_res_norm();
-// Get the residual scaling
-// Check for direct convergence
-// Get data for globalization algo: in 1D I call Jac ... not great ...
-//
-   Real norm_NL_res = norm_NL_res0; 
+// true in ef_NL_residual initalize the residual scaling.
+   ef_NL_residual( dt, pnp_U, pnp_res, true );
+	pnp_res.mult(-1.0,0,2);
+   const Real norm_NL_res0 = ef_NL_norm(pnp_res);	
+// TODO: Check for direct convergence
+// TODO: Get data for globalization algo: in 1D I call Jac ... not great ...
 
-bool exit_newton = false;
-int NK_ite = 0;	
-do {
+	Real norm_NL_res = norm_NL_res0;
+	Real norm_NL_U = norm_NL_U0;
 
-	NK_ite += 1;
-	amrex::Print() << " Newton it: " << NK_ite << " residual: " << norm_NL_res << "\n";
+   bool exit_newton = false;
+   int NK_ite = 0;	
+   do {
 
-// Init Newton update	
-   pnp_dU.setVal(0.0); 	
+	   NK_ite += 1;
+	   amrex::Print() << " Newton it: " << NK_ite << " residual: " << norm_NL_res << "\n";
 
-// GMRES 
-//   ef_GMRES_solve(); 	
+//    GMRES 
+      ef_GMRES_solve( dt, norm_NL_U, pnp_U, pnp_res, pnp_dU ); 	
 
-// Linesearch
-   Real lambda = 1.0; 
+//    Linesearch
+      Real lambda = 0.0; 
 
-// Update Newton solution
-   pnp_dU.mult(lambda,0,2); 
-   pnp_U.plus(pnp_dU,0,2,1);
-//   ef_NL_residual( nE_old_alias, kappaElec_ec, diffElec_ec, dt );
-   norm_NL_res = ef_NL_res_norm();
+//    Update Newton solution/residual ( should be done within linesearch later on )
+      pnp_dU.mult(lambda,0,2); 
+      pnp_U.plus(pnp_dU,0,2,1);
+      ef_NL_residual( dt, pnp_U, pnp_res );
+	   pnp_res.mult(-1.0,0,2);
+      norm_NL_res = ef_NL_norm(pnp_res);		
+		norm_NL_U = ef_NL_norm(pnp_U);
 
-// Test exit conditions  	
-	test_exit_newton(NK_ite, norm_NL_res0, norm_NL_res, exit_newton);
+//    Test exit conditions  	
+	   test_exit_newton(pnp_res, NK_ite, norm_NL_res0, norm_NL_res, exit_newton);
 
-} while( ! exit_newton );
+   } while( ! exit_newton );
 
 // Post newton stuff
 
 }
 
-Real PeleLM::ef_NL_res_norm() {
-	Real norm = pnp_res.norm2();
+Real PeleLM::ef_NL_norm(const MultiFab& pnp_vec) {
+	Real norm = MultiFab::Dot(pnp_vec,0,pnp_vec,0,1,0) +
+               MultiFab::Dot(pnp_vec,1,pnp_vec,1,1,0);
+	norm = std::sqrt(norm);	 		
 	return norm;
 }
 
-void PeleLM::test_exit_newton(const int NK_ite, 
-									   const Real norm_res0,
-										Real norm_res,
-										bool& exit_newton) {
+void PeleLM::ef_NL_norm(const MultiFab&  pnp_vec,
+		    			      Vector<Real>&     norm) {
+	norm[0] = pnp_vec.norm2(0);
+	norm[1] = pnp_vec.norm2(1);
+}
+
+void PeleLM::test_exit_newton(const MultiFab&     pnp_res,
+										const int&          NK_ite, 
+										const Real& norm_res0,
+										const Real& norm_res,
+										bool&               exit_newton) {
 
   const Real tol_Newton = pow(2.0e-16,1.0/3.0);
   Real max_res = pnp_res.norm0();
@@ -264,56 +309,105 @@ void PeleLM::test_exit_newton(const int NK_ite,
 
 }
 
-void PeleLM::ef_NL_residual(MultiFab&   ne_old,
-								    MultiFab*   Ke_ec[BL_SPACEDIM],
-	  								 MultiFab*   De_ec[BL_SPACEDIM],
-								    Real        dt) {
+void PeleLM::ef_NL_residual(const Real      dt,
+								    const MultiFab& pnp_U_in,
+									 MultiFab& pnp_res,
+									 bool update_scaling) {
 
    MultiFab& I_R = get_new_data(RhoYdot_Type);
 	MultiFab I_R_e(I_R,amrex::make_alias,20,1); // TODO : define iE_sp in C++
+
+// Copy const pnp_U_in into local to unscale pnp_U  
+	MultiFab pnp_U(grids,dmap,2,Godunov::hypgrow());
+	MultiFab::Copy(pnp_U, pnp_U_in, 0, 0, 2, Godunov::hypgrow());
+
+// Unscale pnp_U. 
+   pnp_U.mult(pnp_SUne,0,1);
+   pnp_U.mult(pnp_SUphiV,1,1);
  
+// Laplacian and fluxes of PhiV
+   FluxBoxes fluxb(this, 1, 1);
+   MultiFab** phiV_flux = fluxb.get();
+	MultiFab laplacian_term(grids, dmap, 1, 0);
+   compute_phiV_laplacian_term(dt, pnp_U, phiV_flux, laplacian_term);
+
 // Use amrex operators to get the RHS
 // Diffusion of ne
 	MultiFab diff_ne_term(grids, dmap, 1, 0);
-   compute_ne_diffusion_term(dt, De_ec, diff_ne_term);
+   compute_ne_diffusion_term(dt, pnp_U, diffElec_ec, diff_ne_term);
 
 // Convection of ne
 	MultiFab conv_ne_term(grids, dmap, 1, 0);
-   compute_ne_convection_term(conv_ne_term);
+   compute_ne_convection_term(dt, pnp_U, kappaElec_ec, phiV_flux, conv_ne_term);
  
-// Laplacian of PhiV
-	MultiFab laplacian_term(grids, dmap, 1, 0);
-   compute_phiV_laplacian_term(dt, laplacian_term);
-
 // Build the non-linear residual	
 // res(ne(:)) = dt * ( diff(:) + conv(:) + I_R(:) ) - ( ne(:) - ne_old(:) )
 // res(phiv(:)) = \Sum z_k * \tilde Y_k / q_e - ne + Lapl_PhiV
-#ifdef _OPENMP
-#pragma omp parallel
-#endif
-   for (MFIter mfi(pnp_res,true); mfi.isValid(); ++mfi)
+   for (MFIter mfi(pnp_res); mfi.isValid(); ++mfi)
    {
-      const Box& box = mfi.tilebox();
+      const Box& box = mfi.validbox();
       const FArrayBox& Ufab = pnp_U[mfi];
       const FArrayBox& difffab = diff_ne_term[mfi];
       const FArrayBox& convfab = conv_ne_term[mfi];
       const FArrayBox& laplfab = laplacian_term[mfi];
       const FArrayBox& IRefab = I_R_e[mfi];
-      const FArrayBox& neoldfab = ne_old[mfi];
+      const FArrayBox& neoldfab = pnp_nE_old[mfi];
       const FArrayBox& bgchargfab = pnp_bgchrg[mfi];
       FArrayBox& Resfab = pnp_res[mfi];
+
 	   Resfab.copy(difffab,box,0,box,0,1);		// Copy diff term into res for ne
-//	   Resfab.plus(convfab,box,box,0,0,1);		// Add diff term into res for ne
-//	   Resfab.plus(IRefab,box,box,0,0,1);	   // Add forcing term (I_R) into res for ne
-//		Resfab.mult(dt,box,0,1);					// times dt
-//		Resfab.minus(Ufab,box,box,0,0,1);		// Substract current ne
-//		Resfab.plus(neoldfab,box,box,0,0,1);	// Add old ne --> Done with ne residuals
+	   Resfab.plus(convfab,box,box,0,0,1);		// Add diff term into res for ne
+      Resfab.plus(IRefab,box,box,0,0,1);	   // Add forcing term (I_R) into res for ne
+		Resfab.mult(dt,box,0,1);					// times dt
+		Resfab.minus(Ufab,box,box,0,0,1);		// Substract current ne
+		Resfab.plus(neoldfab,box,box,0,0,1);	// Add old ne --> Done with ne residuals
+
 	   Resfab.copy(bgchargfab,box,0,box,1,1);	// Copy bg charge term / q_E into res for phiV
 		Resfab.minus(Ufab,box,box,0,1,1);	   // Substract current ne
 		Resfab.plus(laplfab,box,box,0,1,1);	   // Add the phiV laplacian --> Done with phiV residuals
    }
 
-	showMF("pnp",pnp_res,"pnp_res",level);
+// Residual scaling	
+   if ( update_scaling ) {
+		pnp_SFne = pnp_res.norm0(0);
+		pnp_SFphiV = pnp_res.norm0(1);
+	   amrex::Print() << " F(ne) scaling: " << pnp_SFne << "\n";
+	   amrex::Print() << " F(PhiV) scaling: " << pnp_SFphiV << "\n";
+	}
+
+	pnp_res.mult(1.0/pnp_SFne,0,1);
+	pnp_res.mult(1.0/pnp_SFphiV,1,1);
+
+//	showMF("pnp",pnp_res,"pnp_res",level);
+
+}
+
+void PeleLM::ef_NL_residual_test(const Real      dt,
+								         const MultiFab& pnp_U_in,
+									      MultiFab& pnp_res,
+									      bool update_scaling) {
+
+	MultiFab pnp_U(grids,dmap,2,0);
+	MultiFab::Copy(pnp_U, pnp_U_in, 0, 0, 2, 0);
+
+// Unscale pnp_U. 
+   pnp_U.mult(pnp_SUne,0,1);
+   pnp_U.mult(pnp_SUphiV,1,1);
+
+// Dummy residual function : /10	
+   MultiFab::Copy(pnp_res, pnp_U, 0, 0, 2, 0);	
+	pnp_res.mult(1.0/10.0);
+
+// Residual scaling	
+   if ( update_scaling ) {
+		pnp_SFne = pnp_res.norm0(0);
+		pnp_SFphiV = pnp_res.norm0(1);
+	   amrex::Print() << " F(ne) scaling: " << pnp_SFne << "\n";
+	   amrex::Print() << " F(PhiV) scaling: " << pnp_SFphiV << "\n";
+	}
+
+	pnp_res.mult(1.0/pnp_SFne,0,1);
+	pnp_res.mult(1.0/pnp_SFphiV,1,1);
 
 }
 
@@ -350,7 +444,7 @@ void PeleLM::ef_get_edge_transport(MultiFab* Ke_ec[BL_SPACEDIM],
 											  MultiFab* De_ec[BL_SPACEDIM]) {
 
    for (MFIter mfi(diffElec_cc,true); mfi.isValid(); ++mfi) {
-	   const Box& box = mfi.tilebox();
+	   const Box& box = mfi.validbox();
 
       for (int dir = 0; dir < BL_SPACEDIM; dir++) {
          FPLoc bc_lo = fpi_phys_loc(get_desc_lst()[State_Type].getBC(nE).lo(dir));
@@ -367,16 +461,16 @@ void PeleLM::ef_get_edge_transport(MultiFab* Ke_ec[BL_SPACEDIM],
 }
 
 void PeleLM::compute_ne_diffusion_term(Real dt,
+													MultiFab& pnp_U, 
 													MultiFab* De_ec[BL_SPACEDIM],
 													MultiFab& diff_ne) {
 
-// Get alias to ne in pnp_U
-//	MultiFab nE_alias(pnp_U,amrex::make_alias,0,1);
-	const Real time  = state[State_Type].curTime();	// current time
-	MultiFab&  S = get_new_data(State_Type);
-	FillPatchIterator nEfpi(*this,S,1,time,State_Type,nE,1);
-	MultiFab& nEmf = nEfpi.get_mf();
-	MultiFab::Copy(S,nEmf,0,nE,1,1);
+// Get nEmf from fpi on S for BC
+//	const Real time  = state[State_Type].curTime();	// current time
+//	MultiFab&  S = get_new_data(State_Type);
+//	FillPatchIterator nEfpi(*this,pnp_U,1,time,State_Type,nE,1);
+//	MultiFab& nEmf = nEfpi.get_mf();
+	MultiFab nE_alias(pnp_U,amrex::make_alias,0,1);
 
 // Set-up Lapl operator
    LPInfo info;
@@ -391,10 +485,7 @@ void PeleLM::compute_ne_diffusion_term(Real dt,
    std::array<LinOpBCType,AMREX_SPACEDIM> mlmg_hibc;
 	ef_set_neBC(mlmg_lobc, mlmg_hibc);
 	ne_LAPL.setDomainBC(mlmg_lobc, mlmg_hibc);
-	{
-      MultiFab nE_alias(S,amrex::make_alias,nE,1);
-	   ne_LAPL.setLevelBC(0, &nE_alias);
-	}
+   ne_LAPL.setLevelBC(0, &nE_alias);
 
 // Coeff's	
    ne_LAPL.setScalars(0.0, 1.0); 
@@ -402,7 +493,6 @@ void PeleLM::compute_ne_diffusion_term(Real dt,
 	ne_LAPL.setBCoeffs(0, bcoeffs);
 
 // Get divergence using apply function	
-   MultiFab nE_alias(pnp_U,amrex::make_alias,0,1);
 	FluxBoxes fluxb  (this, 1, 0);								// Flux box ...
 	MultiFab **flux    =   fluxb.get();							// ... associated flux MultiFab
 	MLMG mlmg(ne_LAPL);
@@ -422,30 +512,70 @@ void PeleLM::compute_ne_diffusion_term(Real dt,
 
 }
 
-void PeleLM::compute_ne_convection_term(MultiFab& conv_ne) {
+void PeleLM::compute_ne_convection_term(Real      dt,
+													 MultiFab& pnp_U,
+													 MultiFab* Ke_ec[AMREX_SPACEDIM],
+													 MultiFab* flux_phiV[AMREX_SPACEDIM],
+													 MultiFab& conv_ne) {
 
-	conv_ne.setVal(0.0);
+	const Real* dx        = geom.CellSize();
 
-// Build u_eff : u_mac + Ke*grad(\phi) at faces	
-   for (int d = 0; d < BL_SPACEDIM; ++d) 
-   	pnp_Ueff[d].copy(u_mac[d]);
+// Build u_eff : u_mac - Ke*grad(\phi) at faces	
+   for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+		pnp_Ueff[d].setVal(0.0);
+//   	MultiFab::AddProduct(pnp_Ueff[d],*Ke_ec[d],0,*flux_phiV[d],0,0,1,u_mac[d].nGrow());
+   	MultiFab::AddProduct(pnp_Ueff[d],*Ke_ec[d],0,*flux_phiV[d],0,0,1,0);
+		pnp_Ueff[d].mult(-geom.CellSize()[d]);
+		pnp_Ueff[d].plus(u_mac[d],0,1,u_mac[d].nGrow());
+	}
+
+	const Real time  = state[State_Type].curTime();	// current time
+//	FillPatchIterator nEfpi(*this,pnp_U,Godunov::hypgrow(),time,State_Type,nE,1);
+//	MultiFab& nEmf = nEfpi.get_mf();
+	MultiFab nE_alias(pnp_U,amrex::make_alias,0,Godunov::hypgrow());
+
+{
+	FArrayBox cflux[AMREX_SPACEDIM];
+	FArrayBox edgstate[AMREX_SPACEDIM];
+	Vector<int> state_bc;
+	MultiFab DivU(grids,dmap,1,1);
+	DivU.setVal(0.0);
+
+	for (MFIter S_mfi(nE_alias); S_mfi.isValid(); ++S_mfi) {
+		const Box& bx = S_mfi.validbox();
+		const FArrayBox& neFab = nE_alias[S_mfi];
+		const FArrayBox& force = pnp_gdnv[S_mfi];
+		const FArrayBox& divu  = DivU[S_mfi];
+
+		for (int d=0; d<AMREX_SPACEDIM; ++d) {
+			const Box& ebx = amrex::surroundingNodes(bx,d);
+			cflux[d].resize(ebx,1);
+			edgstate[d].resize(ebx,1);
+		}
+		conv_ne[S_mfi].setVal(0.0);
+
+		state_bc = fetchBCArray(State_Type,bx,nE,1);
+
+		godunov->AdvectScalars(bx, dx, dt,
+									  D_DECL( area[0][S_mfi],     area[1][S_mfi],     area[2][S_mfi]),
+									  D_DECL( pnp_Ueff[0][S_mfi], pnp_Ueff[1][S_mfi], pnp_Ueff[2][S_mfi]),
+									  D_DECL( cflux[0],           cflux[1],           cflux[2]),
+									  D_DECL( edgstate[0],        edgstate[1],        edgstate[2]),
+									  neFab, 0, 1, force, 0, divu, 0, conv_ne[S_mfi], 0, advectionType, state_bc, FPU, volume[S_mfi]);
+   }
+}	
+
+	conv_ne.mult(-1.0);
 
 }
 
 void PeleLM::compute_phiV_laplacian_term(Real dt,
+													  MultiFab& pnp_U,
+													  MultiFab* flux_phiV[AMREX_SPACEDIM],	
 													  MultiFab& lapl_phiV) {
 
-
-// Get alias to ne in pnp_U
-	const Real time  = state[State_Type].curTime();	// current time
-	MultiFab&  S = get_new_data(State_Type);
-	FillPatchIterator PhiVfpi(*this,S,1,time,State_Type,PhiV,1);
-	MultiFab& PhiVmf = PhiVfpi.get_mf();
-	MultiFab::Copy(S,PhiVmf,0,PhiV,1,1);
-
-// Get a bunch of stuff necesary to get the fluxes
-	FluxBoxes fluxb  (this, 1, 0);								// Flux box ...
-	MultiFab **flux     = fluxb.get();							// ... associated flux MultiFab
+// Get PhiV_alias with only 1 GC
+	MultiFab PhiV_alias(pnp_U,amrex::make_alias,1,1);
 
 // Set-up Poisson operator
    LPInfo info;
@@ -455,31 +585,244 @@ void PeleLM::compute_phiV_laplacian_term(Real dt,
    MLPoisson phiV_poisson({geom}, {grids}, {dmap}, info);
    phiV_poisson.setMaxOrder(ef_PoissonMaxOrder);
 
-// BC's	
+// BC's. Use GC from S.
    std::array<LinOpBCType,AMREX_SPACEDIM> mlmg_lobc;
    std::array<LinOpBCType,AMREX_SPACEDIM> mlmg_hibc;
 	ef_set_PoissonBC(mlmg_lobc, mlmg_hibc);
    phiV_poisson.setDomainBC(mlmg_lobc, mlmg_hibc);
-	{
-      MultiFab PhiV_alias(S,amrex::make_alias,PhiV,1);
-      phiV_poisson.setLevelBC(0, &PhiV_alias);
-	}
+   phiV_poisson.setLevelBC(0, &PhiV_alias);
 
-// LinearSolver to get divergence
+// LinearSolver to get divergence. Use PhiV from NL vector pnp_U.
 	MLMG mlmg(phiV_poisson);
-	MultiFab PhiV_alias(pnp_U,amrex::make_alias,1,1);
 	mlmg.apply({&lapl_phiV},{&PhiV_alias});
 
-//	std::array<MultiFab*,AMREX_SPACEDIM> fp{D_DECL(flux[0],flux[1],flux[2])};
-//	mlmg.getFluxes({fp},{&PhiV_alias});
+// Need the "fluxes" of Phi later on, get that now !
+   std::array<MultiFab*,AMREX_SPACEDIM> fp{D_DECL(flux_phiV[0],flux_phiV[1],flux_phiV[2])};
+	mlmg.getFluxes({fp},{&PhiV_alias});
 
 // Rescale fluxes to get right stuff regardless of cartesian or r-Z
-//   for (int d = 0; d < BL_SPACEDIM; ++d) 
-//       flux[d]->mult(1.0/(dt*geom.CellSize()[d]));   
+   for (int d = 0; d < AMREX_SPACEDIM; ++d) 
+       flux_phiV[d]->mult(1.0/(geom.CellSize()[d]));   
 
-// Get flux divergence, scaled by -1
-//	flux_divergence(lapl_phiV,0,flux,0,1,-1);
+}
 
+void PeleLM::ef_GMRES_solve(const Real dt,
+									 const Real& norm_pnp_U,
+									 const MultiFab& pnp_U,
+									 const MultiFab& b_in,	
+									 MultiFab& x0) {
+
+// Initial guess of dU = 0.0
+	x0.setVal(0.0);
+
+   MultiFab Ax(grids,dmap,2,1);
+   MultiFab dx(grids,dmap,2,1);
+   MultiFab x(grids,dmap,2,1);
+   MultiFab r(grids,dmap,2,1);
+	Vector<MultiFab> KspBase(ef_GMRES_size+1);				// Krylov ortho basis
+	for (int d = 0; d <= ef_GMRES_size ; ++d) {
+		KspBase[d].define(grids,dmap,2,1); 
+	}
+
+	Real beta = 0.0;													// Initial resisual
+	Real rel_tol = 0.0;												// Target relative rolerance
+
+   bool GMRES_converged = false;
+   int GMRES_restart = 0;	
+   do {																	// Outer restarted GMRES loop
+
+	   Real H[ef_GMRES_size+1][ef_GMRES_size] = {0.0}; 	// Hessenberg mattrix
+	   Real y[ef_GMRES_size+1] = {0.0};							// Solution vector
+	   Real g[ef_GMRES_size+1] = {0.0};							// Residual
+	   Real givens[ef_GMRES_size+1][2] = {0.0};				// Givens rotations
+
+      ef_JtV(dt, norm_pnp_U, pnp_U, b_in, x0, Ax);			// Apply JtV on x0, useless since x0 == 0, ...
+      MultiFab::LinComb(r,1.0,Ax,0,-1.0,b_in,0,0,2,0);	// Build residual		
+//    TODO: apply PC on r = Ax - b
+      Real norm_r = ef_NL_norm(r);    							// Calc & store the initial residual
+		if ( GMRES_restart == 0 ) {
+			beta = norm_r;
+			rel_tol = norm_r * ef_GMRES_reltol;
+		}
+	   amrex::Print() << " GMRES restart: " << GMRES_restart << " init residual: " << norm_r << "\n";
+
+// 	Initialize KspBase with normalized residual		
+		g[0] = norm_r;
+		r.mult(1.0/norm_r);
+		MultiFab::Copy(KspBase[0],r, 0 ,0, 2, 0);
+
+		int k = 0;
+		int k_end;
+		Real norm_vec;
+		Real norm_vec2;
+		Real norm_Hlast;
+		Real GS_corr;
+
+		for ( int k = 0 ; k < ef_GMRES_size ; ++k ) {		// Inner restarted GMRES loop
+
+			amrex::Print() << " --> GMRES ite: " << k << "\n"; 
+
+			ef_JtV(dt, norm_pnp_U, pnp_U, b_in, KspBase[k],r);
+//       TODO: apply PC on Ksp base
+			MultiFab::Copy(KspBase[k+1],r, 0 ,0,  2, 0);
+			norm_vec = ef_NL_norm(KspBase[k+1]);
+//			amrex::Print() << " norm of KspBase k bef ortho : " << ef_NL_norm(KspBase[k]) << "\n";
+//   	   showMF("pnp",KspBase[k+1],"pnp_KspBase_befortho",level,k+1);
+
+//			Gram-Schmidt ortho.			
+			for ( int row = 0; row <= k; ++row ) {
+//				amrex::Print() << "     Ortho with GMRES vec row = " << row << "\n";
+//				amrex::Print() << "     norm of KspBase vec row : " << ef_NL_norm(KspBase[row]) << "\n";
+				H[row][k] = MultiFab::Dot(KspBase[k+1],0,KspBase[row],0,2,0); 
+				GS_corr = - H[row][k];	
+//				amrex::Print() << "     Dotprod with GMRES vec " << row << " before : " << H[row][k] << "\n";
+				MultiFab::Saxpy(KspBase[k+1],GS_corr,KspBase[row],0,0,2,0);	
+				Real Hcorr = MultiFab::Dot(KspBase[k+1],0,KspBase[row],0,2,0);
+				if ( fabs(Hcorr) > 1.0e-15 ) {
+					H[row][k] += Hcorr;
+					GS_corr = - Hcorr;
+					MultiFab::Saxpy(KspBase[k+1],GS_corr,KspBase[row],0,0,2,0);
+				}
+//				amrex::Print() << "     Dotprod with GMRES vec " << row << " : " << MultiFab::Dot(KspBase[k+1],0,KspBase[row],0,2,0) << "\n";
+			}
+			norm_vec2 = ef_NL_norm(KspBase[k+1]);
+//			amrex::Print() << "     GMRES base " << k+1 << " norm " << norm_vec2 << "\n"; 
+			H[k+1][k] = norm_vec2;
+
+//			TODO: Test for re-ortho.			
+//			if ( norm_vec + 0.0001 * norm_vec2 == norm_vec ) {
+//			}
+
+			if ( norm_vec2 > 0.0 ) 
+				KspBase[k+1].mult(1.0/norm_vec2);
+
+//   	   showMF("pnp",KspBase[k+1],"pnp_KspBase_aftortho",level,k+1);
+
+//       Givens rotation
+         for ( int row = 0; row < k; ++row ) {
+            Real v1 = givens[row][0] * H[row][k] - givens[row][1] * H[row+1][k];
+            Real v2 = givens[row][1] * H[row][k] + givens[row][0] * H[row+1][k];
+            H[row][k] = v1;   
+            H[row+1][k] = v2;
+			}
+
+         norm_Hlast = std::sqrt(H[k][k]*H[k][k] + H[k+1][k]*H[k+1][k]);
+         if ( norm_Hlast > 0.0 ) { 
+//			   amrex::Print() << " norm_Hlast: " << norm_Hlast << "\n";
+            givens[k][0] =  H[k][k] / norm_Hlast;
+            givens[k][1] = -H[k+1][k] / norm_Hlast;
+            H[k][k] = givens[k][0] * H[k][k] - givens[k][1] * H[k+1][k];
+            H[k+1][k] = 0.0;
+            Real v1 = givens[k][0] * g[k] - givens[k][1] * g[k+1];
+            Real v2 = givens[k][1] * g[k] + givens[k][0] * g[k+1];
+            g[k] = v1;
+            g[k+1] = v2; 
+         }
+
+		   norm_r = fabs(g[k+1]);
+			amrex::Print() << " restart GMRES residual: " << norm_r << "\n";
+
+//			Exit conditions. k_end used here to construct the update.			
+			if ( norm_r < rel_tol ) {
+				GMRES_converged = true;
+				k_end = k;
+			}
+			if ( k == ef_GMRES_size-1)
+				k_end = ef_GMRES_size-1;
+			
+		}																			// Inner GMRES loop
+
+//		Plot H mat		
+//      for ( int i = 0; i <= ef_GMRES_size ; ++i ) {		
+//			amrex::Print() << " - ";
+//			for ( int j = 0; j < ef_GMRES_size ; ++j ) {
+//				amrex::Print() << H[i][j] << " ";
+//			}
+//			amrex::Print() << "\n";
+//		}
+
+//		Solve H.y = g
+		y[k_end] = g[k_end]/H[k_end][k_end];
+		amrex::Print() << " y["<<k_end<<"] : " << y[k_end] << "\n";
+		for ( int k = k_end-1; k >= 0; --k ) {
+			Real sum_tmp = 0.0;
+			for ( int j = k+1; j <= k_end; ++j ) {
+			   sum_tmp += H[k][j] * y[j];
+			}
+			y[k] = ( g[k] - sum_tmp ) / H[k][k];
+			amrex::Print() << " y["<<k<<"] : " << y[k] << "\n";
+		} 
+
+		amrex::Print() << " Finished restart GMRES in : " << k_end+1 << " iterations \n";
+
+//		Compute solution update		
+		r.setVal(0.0);
+		for ( int i = 0; i <= k_end; ++i ) {
+//			amrex::Print() << " Norm of " << i << " vec of KspBase: " << ef_NL_norm(KspBase[i]) << " \n";
+			MultiFab::Saxpy(r,-y[i],KspBase[i], 0, 0, 2, 0);
+// 	   showMF("pnp",KspBase[i],"pnp_KspBase",level,i);
+		}
+		amrex::Print() << " Norm of solution update : " << ef_NL_norm(r) << " \n";
+
+//		Update solution		
+		MultiFab::Add(x0,r,0,0,2,0);
+   	showMF("pnp",x0,"pnp_x0_GMRES",level,GMRES_restart);
+
+		GMRES_restart += 1;
+//	   amrex::Abort("Because I want to !");
+
+   } while( ! GMRES_converged && GMRES_restart < ef_max_GMRES_rst );
+
+	amrex::Print() << " Finished with GMRES \n";
+
+	KspBase.clear();
+	amrex::Abort("Because I want to !");
+
+}
+
+void PeleLM::ef_JtV(const Real dt,
+	  	              const Real& norm_pnp_U, 
+			           const MultiFab& pnp_U,	 
+				        const MultiFab& pnp_res,	 
+				        const MultiFab& v_in,
+			           MultiFab& JtV) {	 
+
+// TODO: do I need thi copy ?	
+	MultiFab v(grids,dmap,2,0);
+	MultiFab::Copy(v, v_in, 0, 0, 2, 0);
+
+// Compute perturbation scaling
+	Real normv = ef_NL_norm(v);
+	if ( normv == 0.0 ) {
+		JtV.setVal(0.0);
+		return;
+	}
+   Real delta_pert = ef_lambda_jfnk * ( ef_lambda_jfnk + norm_pnp_U / normv );
+//	amrex::Print() << " JtV normU: " << norm_pnp_U << "\n";
+//	amrex::Print() << " JtV normv: " << normv << "\n";
+//	amrex::Print() << " JtV dpert: " << delta_pert << "\n";
+
+// Get perturbed pnp vector	
+   MultiFab U_pert(grids,dmap,2,Godunov::hypgrow());
+	MultiFab::Copy(U_pert, pnp_U, 0, 0, 2, Godunov::hypgrow());
+	MultiFab::Saxpy(U_pert,delta_pert,v, 0, 0, 2 ,0);
+
+//	showMF("pnp",U_pert,"pnp_Upert",level);
+//	showMF("pnp",v,"pnp_PertV",level);
+//	showMF("pnp",pnp_U,"pnp_U_at_pert",level);
+//	showMF("pnp",pnp_res,"pnp_res_at_JtV",level);
+
+// Get perturbed residual	
+	MultiFab res_pert(grids,dmap,2,1);
+	ef_NL_residual( dt, U_pert, res_pert );
+//	showMF("pnp",res_pert,"res_pert",level);
+   res_pert.mult(-1.0);
+	
+// Reuse U_pert MultiFab to store Jtv	
+	MultiFab::LinComb(JtV,1.0,res_pert,0,-1.0,pnp_res,0,0,2,0);
+	JtV.mult(-1.0/delta_pert);
+//	showMF("pnp",JtV,"JtV",level);
+//	amrex::Abort("Because I want to !");
 }
 
 // Setup BC conditions for diffusion operator on nE. Directly copied from the diffusion one ...
