@@ -2,7 +2,7 @@
   probtype = 'premixed_fixed_inlet'
 
   V_in = .2280410684149
-  standoff = -.022
+  standoff = -.025
   pertmag = 0.0004
 
   max_trac_lev = 3

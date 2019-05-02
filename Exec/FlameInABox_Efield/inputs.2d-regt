@@ -1,6 +1,6 @@
 #----------------------------TOP LEVEL INPUTS----------------------
 max_step  =  10000
-max_step  =  20
+max_step  =  1
 stop_time = 4.00
 
 #--------------------------MISC/UNSORTED INPUTS-----------------------------
@@ -45,6 +45,7 @@ cg.cg_solver=1
 amr.n_cell    = 64 64 64
 amr.n_cell    = 32 32 32
 amr.n_cell    = 128 128 128
+amr.n_cell    = 256 256 256
 
 amr.v=1
 amr.max_level =  0            # maximum level number allowed
@@ -114,6 +115,10 @@ ns.unity_Le = 0
 
 ns.dpdt_option = 0
 #macop.max_order = 3
+#
+ShowMF_Sets = pnp
+
+amrex.trap_fpe_invalid=1
 
 #ns.prandtl = .70
 #ns.schmidt = .70
@@ -134,7 +139,7 @@ geometry.is_periodic = 1 0
 geometry.coord_sys = 0  # 0 => cart, 1 => RZ
 
 geometry.prob_lo   =  0. 0. 0.
-geometry.prob_hi   = .016 .016 .016
+geometry.prob_hi   = .01 .01 .01
 
 
 # ------------------  INPUTS TO GODUNOV CLASS ----------------------
@@ -176,3 +181,5 @@ mac.do_outflow_bcs = 0
 fab.format = NATIVE
 
 fabarray.mfiter_tile_size = 8 8 8 
+
+ns.hack_nochem = 1
