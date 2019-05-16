@@ -6,6 +6,8 @@
 #include <NavierStokesBase.H>
 #include <ChemDriver.H>
 #include <AMReX_MLMG.H>
+#include <AMReX_MLABecCecLaplacian.H>
+#include <AMReX_MLABecLaplacian.H>
 
 #include <list>
 #include <map>

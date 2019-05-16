@@ -1,11 +1,11 @@
-void PeleLM::ef_advance_setup(Real time) {
+void PeleLM::ef_advance_setup(const Real &time) {
 
    ef_solve_phiv(time); 
 
 	ef_calc_transport(time);
 }	
 
-void PeleLM::ef_calc_transport(Real time) {
+void PeleLM::ef_calc_transport(const Real &time) {
 	BL_PROFILE("EF::ef_calc_transport()");
 
 	const TimeLevel whichTime = which_time(State_Type, time);
@@ -92,7 +92,7 @@ void PeleLM::ef_define_data() {
 	pnp_SUphiV = 1.0;
 }
 
-void PeleLM::ef_solve_phiv(Real time) {
+void PeleLM::ef_solve_phiv(const Real &time) {
 
 	MultiFab&  S = get_new_data(State_Type);
 	MultiFab rhs_poisson(grids,dmap,1,nGrowAdvForcing);
@@ -184,11 +184,11 @@ void PeleLM::ef_init() {
 }
 
 
-void PeleLM::ef_solve_PNP(Real dt, 
-							     Real time, 
-							     MultiFab& Dn,
-								  MultiFab& Dnp1,
-								  MultiFab& Dhat) {
+void PeleLM::ef_solve_PNP(const Real     &dt, 
+							     const Real     &time, 
+							     const MultiFab &Dn,
+								  const MultiFab &Dnp1,
+								  const MultiFab &Dhat) {
 
 	BL_PROFILE("EF::ef_solve_PNP()");
 
@@ -276,24 +276,24 @@ void PeleLM::ef_solve_PNP(Real dt,
 
 }
 
-Real PeleLM::ef_NL_norm(const MultiFab& pnp_vec) {
+Real PeleLM::ef_NL_norm(const MultiFab &pnp_vec) {
 	Real norm = MultiFab::Dot(pnp_vec,0,pnp_vec,0,1,0) +
                MultiFab::Dot(pnp_vec,1,pnp_vec,1,1,0);
 	norm = std::sqrt(norm);	 		
 	return norm;
 }
 
-void PeleLM::ef_NL_norm(const MultiFab&  pnp_vec,
-		    			      Vector<Real>&     norm) {
+void PeleLM::ef_NL_norm(const MultiFab      &pnp_vec,
+		    			            Vector<Real>  &norm) {
 	norm[0] = pnp_vec.norm2(0);
 	norm[1] = pnp_vec.norm2(1);
 }
 
-void PeleLM::test_exit_newton(const MultiFab&     pnp_res,
-										const int&          NK_ite, 
-										const Real& norm_res0,
-										const Real& norm_res,
-										bool&               exit_newton) {
+void PeleLM::test_exit_newton(const MultiFab &pnp_res,
+										const int      &NK_ite, 
+										const Real     &norm_res0,
+										const Real     &norm_res,
+										      bool     &exit_newton) {
 
   const Real tol_Newton = pow(2.0e-16,1.0/3.0);
   Real max_res = pnp_res.norm0();
@@ -309,9 +309,9 @@ void PeleLM::test_exit_newton(const MultiFab&     pnp_res,
 
 }
 
-void PeleLM::ef_NL_residual(const Real      dt,
-								    const MultiFab& pnp_U_in,
-									 MultiFab& pnp_res,
+void PeleLM::ef_NL_residual(const Real      &dt,
+								    const MultiFab  &pnp_U_in,
+									       MultiFab  &pnp_res,
 									 bool update_scaling) {
 
    MultiFab& I_R = get_new_data(RhoYdot_Type);
@@ -382,9 +382,9 @@ void PeleLM::ef_NL_residual(const Real      dt,
 
 }
 
-void PeleLM::ef_NL_residual_test(const Real      dt,
-								         const MultiFab& pnp_U_in,
-									      MultiFab& pnp_res,
+void PeleLM::ef_NL_residual_test(const Real      &dt,
+								         const MultiFab  &pnp_U_in,
+									            MultiFab  &pnp_res,
 									      bool update_scaling) {
 
 	MultiFab pnp_U(grids,dmap,2,0);
@@ -411,10 +411,10 @@ void PeleLM::ef_NL_residual_test(const Real      dt,
 
 }
 
-void PeleLM::ef_bg_chrg(Real dt,
-							   MultiFab& Dn,
-								MultiFab& Dnp1,
-								MultiFab& Dhat) {
+void PeleLM::ef_bg_chrg(const Real      &dt,
+							   const MultiFab  &Dn,
+								const MultiFab  &Dnp1,
+								const MultiFab  &Dhat) {
 
 #ifdef _OPENMP
 #pragma omp parallel
@@ -440,8 +440,8 @@ void PeleLM::ef_bg_chrg(Real dt,
    }
 }
 
-void PeleLM::ef_get_edge_transport(MultiFab* Ke_ec[BL_SPACEDIM],
-											  MultiFab* De_ec[BL_SPACEDIM]) {
+void PeleLM::ef_get_edge_transport(MultiFab *Ke_ec[BL_SPACEDIM],
+											  MultiFab *De_ec[BL_SPACEDIM]) {
 
    for (MFIter mfi(diffElec_cc,true); mfi.isValid(); ++mfi) {
 	   const Box& box = mfi.validbox();
@@ -460,10 +460,10 @@ void PeleLM::ef_get_edge_transport(MultiFab* Ke_ec[BL_SPACEDIM],
    }
 }
 
-void PeleLM::compute_ne_diffusion_term(Real dt,
-													MultiFab& pnp_U, 
-													MultiFab* De_ec[BL_SPACEDIM],
-													MultiFab& diff_ne) {
+void PeleLM::compute_ne_diffusion_term(const Real      &dt,
+													const MultiFab  &pnp_U, 
+													      MultiFab  *De_ec[BL_SPACEDIM],
+													      MultiFab  &diff_ne) {
 
 // Get nEmf from fpi on S for BC
 //	const Real time  = state[State_Type].curTime();	// current time
@@ -512,11 +512,11 @@ void PeleLM::compute_ne_diffusion_term(Real dt,
 
 }
 
-void PeleLM::compute_ne_convection_term(Real      dt,
-													 MultiFab& pnp_U,
-													 MultiFab* Ke_ec[AMREX_SPACEDIM],
-													 MultiFab* flux_phiV[AMREX_SPACEDIM],
-													 MultiFab& conv_ne) {
+void PeleLM::compute_ne_convection_term(const Real      &dt,
+													 const MultiFab  &pnp_U,
+													       MultiFab  *Ke_ec[AMREX_SPACEDIM],
+													       MultiFab  *flux_phiV[AMREX_SPACEDIM],
+													       MultiFab  &conv_ne) {
 
 	const Real* dx        = geom.CellSize();
 
@@ -569,10 +569,10 @@ void PeleLM::compute_ne_convection_term(Real      dt,
 
 }
 
-void PeleLM::compute_phiV_laplacian_term(Real dt,
-													  MultiFab& pnp_U,
-													  MultiFab* flux_phiV[AMREX_SPACEDIM],	
-													  MultiFab& lapl_phiV) {
+void PeleLM::compute_phiV_laplacian_term(const Real      &dt,
+													  const MultiFab  &pnp_U,
+													        MultiFab  *flux_phiV[AMREX_SPACEDIM],	
+													        MultiFab  &lapl_phiV) {
 
 // Get PhiV_alias with only 1 GC
 	MultiFab PhiV_alias(pnp_U,amrex::make_alias,1,1);
@@ -606,11 +606,11 @@ void PeleLM::compute_phiV_laplacian_term(Real dt,
 
 }
 
-void PeleLM::ef_GMRES_solve(const Real dt,
-									 const Real& norm_pnp_U,
-									 const MultiFab& pnp_U,
-									 const MultiFab& b_in,	
-									 MultiFab& x0) {
+void PeleLM::ef_GMRES_solve(const Real      &dt,
+									 const Real      &norm_pnp_U,
+									 const MultiFab  &pnp_U,
+									 const MultiFab  &b_in,	
+									       MultiFab  &x0) {
 
 // Initial guess of dU = 0.0
 	x0.setVal(0.0);
@@ -638,7 +638,7 @@ void PeleLM::ef_GMRES_solve(const Real dt,
 
       ef_JtV(dt, norm_pnp_U, pnp_U, b_in, x0, Ax);			// Apply JtV on x0, useless since x0 == 0, ...
       MultiFab::LinComb(r,1.0,Ax,0,-1.0,b_in,0,0,2,0);	// Build residual		
-//    TODO: apply PC on r = Ax - b
+      ef_applyPrecond(r,Ax);    
       Real norm_r = ef_NL_norm(r);    							// Calc & store the initial residual
 		if ( GMRES_restart == 0 ) {
 			beta = norm_r;
@@ -663,7 +663,7 @@ void PeleLM::ef_GMRES_solve(const Real dt,
 			amrex::Print() << " --> GMRES ite: " << k << "\n"; 
 
 			ef_JtV(dt, norm_pnp_U, pnp_U, b_in, KspBase[k],r);
-//       TODO: apply PC on Ksp base
+			ef_applyPrecond(r,KspBase[k+1]);       
 			MultiFab::Copy(KspBase[k+1],r, 0 ,0,  2, 0);
 			norm_vec = ef_NL_norm(KspBase[k+1]);
 //			amrex::Print() << " norm of KspBase k bef ortho : " << ef_NL_norm(KspBase[k]) << "\n";
@@ -780,12 +780,12 @@ void PeleLM::ef_GMRES_solve(const Real dt,
 
 }
 
-void PeleLM::ef_JtV(const Real dt,
-	  	              const Real& norm_pnp_U, 
-			           const MultiFab& pnp_U,	 
-				        const MultiFab& pnp_res,	 
-				        const MultiFab& v_in,
-			           MultiFab& JtV) {	 
+void PeleLM::ef_JtV(const Real      &dt,
+	  	              const Real      &norm_pnp_U, 
+			           const MultiFab  &pnp_U,	 
+				        const MultiFab  &pnp_res,	 
+				        const MultiFab  &v_in,
+			                 MultiFab  &JtV) {	 
 
 // TODO: do I need thi copy ?	
 	MultiFab v(grids,dmap,2,0);
@@ -825,9 +825,37 @@ void PeleLM::ef_JtV(const Real dt,
 //	amrex::Abort("Because I want to !");
 }
 
+void PeleLM::ef_setUpPrecond (const Real   &dt,
+										MultiFab* De_ec[BL_SPACEDIM]) {
+
+// Some LPInfo stuff	
+   LPInfo info;
+   info.setAgglomeration(1);
+   info.setConsolidation(1);
+   info.setMetricTerm(false);
+
+// Define all three LinOps	
+	pnp_pc_Stilda.define({geom}, {grids}, {dmap}, info);
+	pnp_pc_diff.define({geom}, {grids}, {dmap}, info);
+	pnp_pc_drift.define({geom}, {grids}, {dmap}, info);
+   pnp_pc_Stilda.setMaxOrder(ef_PoissonMaxOrder);
+   pnp_pc_diff.setMaxOrder(ef_PoissonMaxOrder);
+   pnp_pc_drift.setMaxOrder(ef_PoissonMaxOrder);
+
+// Coeff's	
+//   diff.setScalars(-1.0, -dt, dt); 
+//	std::array<const MultiFab*,AMREX_SPACEDIM> bcoeffs{D_DECL(De_ec[0],De_ec[1],De_ec[2])};
+//	diff.setBCoeffs(0, bcoeffs);
+}
+
+void PeleLM::ef_applyPrecond ( const MultiFab &v,
+										       MultiFab &Pv) {
+	MultiFab::Copy(Pv, v, 0, 0, 2, 1); 
+}
+
 // Setup BC conditions for diffusion operator on nE. Directly copied from the diffusion one ...
-void PeleLM::ef_set_neBC(std::array<LinOpBCType,AMREX_SPACEDIM>& diff_lobc,
-                              std::array<LinOpBCType,AMREX_SPACEDIM>& diff_hibc) {
+void PeleLM::ef_set_neBC(std::array<LinOpBCType,AMREX_SPACEDIM> &diff_lobc,
+                         std::array<LinOpBCType,AMREX_SPACEDIM> &diff_hibc) {
 
     const BCRec& bc = get_desc_lst()[State_Type].getBC(nE);
 
@@ -883,8 +911,8 @@ void PeleLM::ef_set_neBC(std::array<LinOpBCType,AMREX_SPACEDIM>& diff_lobc,
 }
 
 // Setup BC conditions for linear Poisson solve on PhiV. Directly copied from the diffusion one ...
-void PeleLM::ef_set_PoissonBC(std::array<LinOpBCType,AMREX_SPACEDIM>& mlmg_lobc,
-                              std::array<LinOpBCType,AMREX_SPACEDIM>& mlmg_hibc) {
+void PeleLM::ef_set_PoissonBC(std::array<LinOpBCType,AMREX_SPACEDIM> &mlmg_lobc,
+                              std::array<LinOpBCType,AMREX_SPACEDIM> &mlmg_hibc) {
 
     const BCRec& bc = get_desc_lst()[State_Type].getBC(PhiV);
 

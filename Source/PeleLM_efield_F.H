@@ -47,4 +47,4 @@
                                const amrex::Real* Dhatspec, ARLIM_P(Dhlo),  ARLIM_P(Dhhi),
                                const amrex::Real* IRspec,   ARLIM_P(ilo),   ARLIM_P(ihi),
                                amrex::Real* bg_chrg,  ARLIM_P(bglo),  ARLIM_P(bghi),
-										 amrex::Real* dt);
+										 const amrex::Real* dt);
