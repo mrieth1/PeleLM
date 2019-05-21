@@ -1210,24 +1210,16 @@ PeleLM::init_once ()
   //
   int dummy_State_Type;
 
-  int tTemp = -1;
-  int have_temp = isStateVariable("temp", dummy_State_Type, tTemp);
-  AMREX_ALWAYS_ASSERT(tTemp == Temp);
+  int have_temp = isStateVariable("temp", dummy_State_Type, Temp);
+  have_temp = have_temp && State_Type == dummy_State_Type;
+  have_temp = have_temp && isStateVariable("rhoh", dummy_State_Type, RhoH);
 
   have_temp = have_temp && State_Type == dummy_State_Type;
-  int tRhoH = -1;
-  have_temp = have_temp && isStateVariable("rhoh", dummy_State_Type, tRhoH);
-  AMREX_ALWAYS_ASSERT(tRhoH == RhoH);
-  have_temp = have_temp && State_Type == dummy_State_Type;
 
-  int tTrac = -1;
-  have_trac = isStateVariable("tracer", dummy_State_Type, tTrac);
-  AMREX_ALWAYS_ASSERT(tTrac == Trac);
+  have_trac = isStateVariable("tracer", dummy_State_Type, Trac);
   have_trac = have_trac && State_Type == dummy_State_Type;
 
-  int tRhoRT = -1;
-  have_rhort = isStateVariable("RhoRT", dummy_State_Type, tRhoRT);
-  AMREX_ALWAYS_ASSERT(tRhoRT == RhoRT);
+  have_rhort = isStateVariable("RhoRT", dummy_State_Type, RhoRT);
   have_rhort = have_rhort && State_Type == dummy_State_Type;
 
   if (!have_temp)
