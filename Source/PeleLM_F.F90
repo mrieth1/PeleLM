@@ -23,8 +23,7 @@ module PeleLM_F
 
   private
 
-  public :: set_scal_numb, get_typical_vals, set_typical_vals, &
-            set_ht_visc_common, init_typcals_common, get_pamb, &
+  public :: set_scal_numb, set_ht_visc_common, get_pamb, &
             get_closed_chamber, get_dpdt, set_common, active_control, &
             pphys_calc_src_sdc, pphys_getP1atm_MKS, &
             pphys_get_spec_name2, pphys_TfromHYpt

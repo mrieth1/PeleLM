@@ -550,7 +550,6 @@ private:
   static int         nreactions;
   static amrex::Vector<std::string> spec_names;
   static int         floor_species;
-  static ChemDriver* chemSolve;
   static amrex::Real rgas;
   static amrex::Real prandtl;
   static amrex::Real schmidt;

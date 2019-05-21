@@ -269,7 +269,7 @@ PeleLM::compute_rhohmix (Real      time,
         sfab.mult(tmp,0,sCompY+k,1);
       }
 	    
-      getHmixGivenTY_pphys(rhohmix[mfi],state,state,bx,
+      getHmixGivenTY_pphys(rhohmix[mfi],sfab,sfab,bx,
                                     sCompT,sCompY,sCompH);
       //
       // Convert hmix to rho*hmix
@@ -368,34 +368,34 @@ PeleLM::init_extern ()
 //}
 
 void
-PeleLM::reactionRateRhoY_pphys(FArrayBox&       RhoYdot,
-                             const FArrayBox& RhoY,
-                             const FArrayBox& RhoH,
-                             const FArrayBox& T,
-                             const Box&       box,
-                             int              sCompRhoY,
-                             int              sCompRhoH,
-                             int              sCompT,
-                             int              sCompRhoYdot) const
+PeleLM::reactionRateRhoY_pphys(FArrayBox&       fRhoYdot,
+                               const FArrayBox& fRhoY,
+                               const FArrayBox& fRhoH,
+                               const FArrayBox& fT,
+                               const Box&       box,
+                               int              sCompRhoY,
+                               int              sCompRhoH,
+                               int              sCompT,
+                               int              sCompRhoYdot) const
 {
-    BL_ASSERT(RhoYdot.nComp() >= sCompRhoYdot + nspecies);
-    BL_ASSERT(RhoY.nComp() >= sCompRhoY + nspecies);
-    BL_ASSERT(RhoH.nComp() > sCompRhoH);
-    BL_ASSERT(T.nComp() > sCompT);
+    BL_ASSERT(fRhoYdot.nComp() >= sCompRhoYdot + nspecies);
+    BL_ASSERT(fRhoY.nComp() >= sCompRhoY + nspecies);
+    BL_ASSERT(fRhoH.nComp() > sCompRhoH);
+    BL_ASSERT(fT.nComp() > sCompT);
 
-    const Box& mabx = RhoY.box();
-    const Box& mbbx = RhoH.box();
-    const Box& mcbx = T.box();
-    const Box& mobx = RhoYdot.box();
+    const Box& mabx = fRhoY.box();
+    const Box& mbbx = fRhoH.box();
+    const Box& mcbx = fT.box();
+    const Box& mobx = fRhoYdot.box();
     
     const Box& ovlp = box & mabx & mbbx & mcbx & mobx;
     if( ! ovlp.ok() ) return;
     
     pphys_RRATERHOY(ovlp.loVect(), ovlp.hiVect(),
-                   RhoY.dataPtr(sCompRhoY),       ARLIM(mabx.loVect()), ARLIM(mabx.hiVect()),
-                   RhoH.dataPtr(sCompRhoH),       ARLIM(mbbx.loVect()), ARLIM(mbbx.hiVect()),
-                   T.dataPtr(sCompT),             ARLIM(mcbx.loVect()), ARLIM(mcbx.hiVect()),
-                   RhoYdot.dataPtr(sCompRhoYdot), ARLIM(mobx.loVect()), ARLIM(mobx.hiVect()) );
+                    fRhoY.dataPtr(sCompRhoY),       ARLIM(mabx.loVect()), ARLIM(mabx.hiVect()),
+                    fRhoH.dataPtr(sCompRhoH),       ARLIM(mbbx.loVect()), ARLIM(mbbx.hiVect()),
+                    fT.dataPtr(sCompT),             ARLIM(mcbx.loVect()), ARLIM(mcbx.hiVect()),
+                    fRhoYdot.dataPtr(sCompRhoYdot), ARLIM(mobx.loVect()), ARLIM(mobx.hiVect()) );
 }
 
 void
@@ -1557,7 +1557,7 @@ PeleLM::set_typical_values(bool is_restart)
     amrex::Print() << "\tDensity: " << typical_values[Density] << '\n';
     amrex::Print() << "\tTemp:    " << typical_values[Temp]    << '\n';
     amrex::Print() << "\tRhoH:    " << typical_values[RhoH]    << '\n';
-    const Vector<std::string>& names = getChemSolve().speciesNames();
+    Vector<std::string> names; getSpeciesNames(names);
     for (int i=0; i<nspecies; ++i) {
       amrex::Print() << "\tY_" << names[i] << ": " << typical_values[first_spec+i] << '\n';
     }
@@ -2581,7 +2581,7 @@ PeleLM::sum_integrated_quantities ()
     Print() << "TIME= " << tnp1 << " MASS= " << mass;
   }
   
-  if (getChemSolve().index(fuelName) >= 0)
+  if (getSpeciesIdx(fuelName) >= 0)
   {
     int MyProc  = ParallelDescriptor::MyProc();
     int step    = parent->levelSteps(0);
@@ -2668,10 +2668,6 @@ PeleLM::sum_integrated_quantities ()
 
   if (getSpeciesIdx(productName) >= 0)
   {
-    int MyProc  = ParallelDescriptor::MyProc();
-    int step    = parent->levelSteps(0);
-    int restart = 0;
-
     Real productmass = 0.0;
     std::string product = "rho.Y(" + productName + ")";
     for (int lev = 0; lev <= finest_level; lev++) {
@@ -4147,7 +4143,7 @@ PeleLM::temperature_stats (MultiFab& S)
                    << ", "                << scaleMax[RhoH   - BL_SPACEDIM] << '\n';
 
     if (aNegY) {
-      const Vector<std::string>& names = PeleLM::getChemSolve().speciesNames();
+      Vector<std::string> names; getSpeciesNames(names);
 
       amrex::Print() << "  Species w/min < 0: ";
       for (int i = 0; i < nspecies; ++i) {
@@ -4171,7 +4167,6 @@ PeleLM::compute_rhoRT (const MultiFab& S,
 
   const Real strt_time = ParallelDescriptor::second();
 
-  const BoxArray& sgrids = S.boxArray();
   int nCompY = last_spec - first_spec + 1;
 
 #ifdef _OPENMP
@@ -4211,7 +4206,7 @@ PeleLM::compute_rhoRT (const MultiFab& S,
       for (int k = 0; k < nCompY; k++)
         sfab.mult(tmp,box,0,sCompY+k,1);
   
-      getPGivenRTY_pphys(p[mfi],state,state,state,box,sCompR,sCompT,sCompY,pComp);
+      getPGivenRTY_pphys(p[mfi],sfab,sfab,sfab,box,sCompR,sCompT,sCompY,pComp);
     }
   }
   
@@ -5395,9 +5390,9 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       const Box&       bx       = Smfi.tilebox();
       FArrayBox&       fc       = fcnCntTemp[Smfi];
       const FArrayBox& frc      = FTemp[Smfi];
-      FArrayBox*       chemDiag = (do_diag ? &(diagTemp[Smfi]) : 0);
 
       // FORTRAN WAY OF CALLING DVODE IN PP
+      //FArrayBox*       chemDiag = (do_diag ? &(diagTemp[Smfi]) : 0);
       //BoxArray ba = do_avg_down_chem ? amrex::complementIn(bx,cf_grids) : BoxArray(bx);
 
       //for (int i = 0; i < ba.size(); ++i)
@@ -5536,7 +5531,6 @@ PeleLM::compute_scalar_advection_fluxes_and_divergence (const MultiFab& Force,
   const Real  strt_time = ParallelDescriptor::second();
   const Real* dx        = geom.CellSize();
   const Real  prev_time = state[State_Type].prevTime();  
-  const int nState = desc_lst[State_Type].nComp();
 
   MultiFab dummy(grids,dmap,1,0,MFInfo().SetAlloc(false));
   
@@ -5570,7 +5564,6 @@ PeleLM::compute_scalar_advection_fluxes_and_divergence (const MultiFab& Force,
   for (MFIter S_mfi(Smf,true); S_mfi.isValid(); ++S_mfi)
   {
     const Box& bx = S_mfi.tilebox();
-    const FArrayBox& S = Smf[S_mfi];
     const FArrayBox& divu = DivU[S_mfi];
     const FArrayBox& force = Force[S_mfi];
 
@@ -5693,7 +5686,6 @@ PeleLM::mac_sync ()
   const Real tnp1       = state[State_Type].curTime();
   const Real prev_pres_time = state[Press_Type].prevTime();
   const Real dt             = parent->dtLevel(level);
-  MultiFab&  rhonph       = get_rho_half_time();
   //
   // DeltaSsync Will hold q^{n+1,p} * (delta rho)^sync for conserved quantities
   // as defined before Eq (18) in DayBell:2000.  Note that in the paper, 
