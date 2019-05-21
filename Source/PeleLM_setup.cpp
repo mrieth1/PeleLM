@@ -598,7 +598,7 @@ PeleLM::variableSetUp ()
     name[i] = "rho.Y(" + spec_names[i] + ")";
 
     desc_lst.setComponent(State_Type,
-                          FirstSpec+i,
+                          first_spec+i,
                           name[i].c_str(),
                           bc,
                           ChemBndryFunc(chem_fill,spec_names[i]),
@@ -613,7 +613,7 @@ PeleLM::variableSetUp ()
   if (false)
   {        
     desc_lst.setComponent(State_Type,
-                          FirstSpec,
+                          first_spec,
                           name,
                           bcs,
                           ChemBndryFunc(chem_fill,spec_names[0],all_chem_fill),
@@ -686,8 +686,8 @@ PeleLM::variableSetUp ()
 
   for (int i = 0; i < nspecies; ++i)
   {
-    advectionType[FirstSpec + i] = Conservative;
-    diffusionType[FirstSpec + i] = Laplacian_SoverRho;
+    advectionType[first_spec + i] = Conservative;
+    diffusionType[first_spec + i] = Laplacian_SoverRho;
   }
 
   if (is_diffusive[Density])
@@ -771,7 +771,7 @@ PeleLM::variableSetUp ()
     const std::string chname = "Y("+spec_names[i]+")";
     derive_lst.add(chname,IndexType::TheCellType(),1,derdvrho,the_same_box);
     derive_lst.addComponent(chname,desc_lst,State_Type,Density,1);
-    derive_lst.addComponent(chname,desc_lst,State_Type,FirstSpec + i,1);
+    derive_lst.addComponent(chname,desc_lst,State_Type,first_spec + i,1);
   }
   //
   // Species mole fractions
@@ -782,7 +782,7 @@ PeleLM::variableSetUp ()
   derive_lst.add("molefrac",IndexType::TheCellType(),nspecies,
                  var_names_molefrac,dermolefrac,the_same_box);
   derive_lst.addComponent("molefrac",desc_lst,State_Type,Density,1);
-  derive_lst.addComponent("molefrac",desc_lst,State_Type,FirstSpec,nspecies);
+  derive_lst.addComponent("molefrac",desc_lst,State_Type,first_spec,nspecies);
 
   //
   // Species concentrations
@@ -795,7 +795,7 @@ PeleLM::variableSetUp ()
   derive_lst.addComponent("concentration",desc_lst,State_Type,Density,1);
   derive_lst.addComponent("concentration",desc_lst,State_Type,Temp,1);
   derive_lst.addComponent("concentration",desc_lst,State_Type,
-                          FirstSpec,nspecies);
+                          first_spec,nspecies);
 
   if (nspecies > 0)
   {
@@ -806,7 +806,7 @@ PeleLM::variableSetUp ()
     derive_lst.addComponent("rhominsumrhoY",desc_lst,State_Type,Density,1);
     for (int i = 0; i < nspecies; i++)
     {
-      const int comp = FirstSpec + i;
+      const int comp = first_spec + i;
       derive_lst.addComponent("rhominsumrhoY",desc_lst,State_Type,comp,1);
     }
   }
