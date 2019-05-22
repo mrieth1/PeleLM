@@ -48,3 +48,4 @@
                                const amrex::Real* IRspec,   ARLIM_P(ilo),   ARLIM_P(ihi),
                                amrex::Real* bg_chrg,  ARLIM_P(bglo),  ARLIM_P(bghi),
 										 const amrex::Real* dt);
+  amrex::Real getScalingLag();

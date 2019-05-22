@@ -169,7 +169,7 @@ void PeleLM::ef_init() {
 	PeleLM::ef_lambda_jfnk				 = 1.0e-7;
 	PeleLM::ef_max_GMRES_rst			 = 50;
 	PeleLM::ef_GMRES_reltol  			 = 1.0e-10;
-	PeleLM::ef_GMRES_size			    = 30;
+	PeleLM::ef_GMRES_size			    = 5;
 
 	ParmParse pp("ef");
 
@@ -236,8 +236,9 @@ void PeleLM::ef_solve_PNP(const Real     &dt,
    ef_bg_chrg(dt, Dn, Dnp1, Dhat);
 
 // Pre-Newton stuff	
-// true in ef_NL_residual initalize the residual scaling.
-   ef_NL_residual( dt, pnp_U, pnp_res, true );
+// first true trigger initalize the residual scaling.
+// second true trigger initalize the preconditioner.
+   ef_NL_residual( dt, pnp_U, pnp_res, true, true );
 	pnp_res.mult(-1.0,0,2);
    const Real norm_NL_res0 = ef_NL_norm(pnp_res);	
 // TODO: Check for direct convergence
@@ -262,7 +263,7 @@ void PeleLM::ef_solve_PNP(const Real     &dt,
 //    Update Newton solution/residual ( should be done within linesearch later on )
       pnp_dU.mult(lambda,0,2); 
       pnp_U.plus(pnp_dU,0,2,1);
-      ef_NL_residual( dt, pnp_U, pnp_res );
+      ef_NL_residual( dt, pnp_U, pnp_res, false, true );
 	   pnp_res.mult(-1.0,0,2);
       norm_NL_res = ef_NL_norm(pnp_res);		
 		norm_NL_U = ef_NL_norm(pnp_U);
@@ -312,7 +313,8 @@ void PeleLM::test_exit_newton(const MultiFab &pnp_res,
 void PeleLM::ef_NL_residual(const Real      &dt,
 								    const MultiFab  &pnp_U_in,
 									       MultiFab  &pnp_res,
-									 bool update_scaling) {
+									       bool      update_scaling,
+											 bool		  update_PC	) {
 
    MultiFab& I_R = get_new_data(RhoYdot_Type);
 	MultiFab I_R_e(I_R,amrex::make_alias,20,1); // TODO : define iE_sp in C++
@@ -337,7 +339,7 @@ void PeleLM::ef_NL_residual(const Real      &dt,
    compute_ne_diffusion_term(dt, pnp_U, diffElec_ec, diff_ne_term);
 
 // Convection of ne
-	MultiFab conv_ne_term(grids, dmap, 1, 0);
+	MultiFab conv_ne_term(grids, dmap, 1, 1);
    compute_ne_convection_term(dt, pnp_U, kappaElec_ec, phiV_flux, conv_ne_term);
  
 // Build the non-linear residual	
@@ -379,6 +381,11 @@ void PeleLM::ef_NL_residual(const Real      &dt,
 	pnp_res.mult(1.0/pnp_SFphiV,1,1);
 
 //	showMF("pnp",pnp_res,"pnp_res",level);
+
+// Update the preconditioner
+   if ( update_PC ) {
+	   ef_setUpPrecond(dt, pnp_U, diffElec_ec);
+	}
 
 }
 
@@ -493,8 +500,8 @@ void PeleLM::compute_ne_diffusion_term(const Real      &dt,
 	ne_LAPL.setBCoeffs(0, bcoeffs);
 
 // Get divergence using apply function	
-	FluxBoxes fluxb  (this, 1, 0);								// Flux box ...
-	MultiFab **flux    =   fluxb.get();							// ... associated flux MultiFab
+//	FluxBoxes fluxb  (this, 1, 0);								// Flux box ...
+//	MultiFab **flux    =   fluxb.get();							// ... associated flux MultiFab
 	MLMG mlmg(ne_LAPL);
 	mlmg.apply({&diff_ne},{&nE_alias});
 
@@ -523,7 +530,6 @@ void PeleLM::compute_ne_convection_term(const Real      &dt,
 // Build u_eff : u_mac - Ke*grad(\phi) at faces	
    for (int d = 0; d < AMREX_SPACEDIM; ++d) {
 		pnp_Ueff[d].setVal(0.0);
-//   	MultiFab::AddProduct(pnp_Ueff[d],*Ke_ec[d],0,*flux_phiV[d],0,0,1,u_mac[d].nGrow());
    	MultiFab::AddProduct(pnp_Ueff[d],*Ke_ec[d],0,*flux_phiV[d],0,0,1,0);
 		pnp_Ueff[d].mult(-geom.CellSize()[d]);
 		pnp_Ueff[d].plus(u_mac[d],0,1,u_mac[d].nGrow());
@@ -532,38 +538,38 @@ void PeleLM::compute_ne_convection_term(const Real      &dt,
 	const Real time  = state[State_Type].curTime();	// current time
 //	FillPatchIterator nEfpi(*this,pnp_U,Godunov::hypgrow(),time,State_Type,nE,1);
 //	MultiFab& nEmf = nEfpi.get_mf();
-	MultiFab nE_alias(pnp_U,amrex::make_alias,0,Godunov::hypgrow());
+	MultiFab nE_alias(pnp_U,amrex::make_alias,0,1);
 
-{
-	FArrayBox cflux[AMREX_SPACEDIM];
-	FArrayBox edgstate[AMREX_SPACEDIM];
-	Vector<int> state_bc;
-	MultiFab DivU(grids,dmap,1,1);
-	DivU.setVal(0.0);
-
-	for (MFIter S_mfi(nE_alias); S_mfi.isValid(); ++S_mfi) {
-		const Box& bx = S_mfi.validbox();
-		const FArrayBox& neFab = nE_alias[S_mfi];
-		const FArrayBox& force = pnp_gdnv[S_mfi];
-		const FArrayBox& divu  = DivU[S_mfi];
-
-		for (int d=0; d<AMREX_SPACEDIM; ++d) {
-			const Box& ebx = amrex::surroundingNodes(bx,d);
-			cflux[d].resize(ebx,1);
-			edgstate[d].resize(ebx,1);
-		}
-		conv_ne[S_mfi].setVal(0.0);
-
-		state_bc = fetchBCArray(State_Type,bx,nE,1);
-
-		godunov->AdvectScalars(bx, dx, dt,
-									  D_DECL( area[0][S_mfi],     area[1][S_mfi],     area[2][S_mfi]),
-									  D_DECL( pnp_Ueff[0][S_mfi], pnp_Ueff[1][S_mfi], pnp_Ueff[2][S_mfi]),
-									  D_DECL( cflux[0],           cflux[1],           cflux[2]),
-									  D_DECL( edgstate[0],        edgstate[1],        edgstate[2]),
-									  neFab, 0, 1, force, 0, divu, 0, conv_ne[S_mfi], 0, advectionType, state_bc, FPU, volume[S_mfi]);
-   }
-}	
+   {
+   	FArrayBox cflux[AMREX_SPACEDIM];
+   	FArrayBox edgstate[AMREX_SPACEDIM];
+   	Vector<int> state_bc;
+   	MultiFab DivU(grids,dmap,1,1);
+   	DivU.setVal(0.0);
+   
+   	for (MFIter S_mfi(nE_alias); S_mfi.isValid(); ++S_mfi) {
+   		const Box& bx = S_mfi.validbox();
+   		const FArrayBox& neFab = nE_alias[S_mfi];
+   		const FArrayBox& force = pnp_gdnv[S_mfi];
+   		const FArrayBox& divu  = DivU[S_mfi];
+   
+   		for (int d=0; d<AMREX_SPACEDIM; ++d) {
+   			const Box& ebx = amrex::surroundingNodes(bx,d);
+   			cflux[d].resize(ebx,1);
+   			edgstate[d].resize(ebx,1);
+   		}
+   		conv_ne[S_mfi].setVal(0.0);
+   
+   		state_bc = fetchBCArray(State_Type,bx,nE,1);
+   
+   		godunov->AdvectScalars(bx, dx, dt,
+   									  D_DECL( area[0][S_mfi],     area[1][S_mfi],     area[2][S_mfi]),
+   									  D_DECL( pnp_Ueff[0][S_mfi], pnp_Ueff[1][S_mfi], pnp_Ueff[2][S_mfi]),
+   									  D_DECL( cflux[0],           cflux[1],           cflux[2]),
+   									  D_DECL( edgstate[0],        edgstate[1],        edgstate[2]),
+   									  neFab, 0, 1, force, 0, divu, 0, conv_ne[S_mfi], 0, advectionType, state_bc, FPU, volume[S_mfi]);
+      }
+   }	
 
 	conv_ne.mult(-1.0);
 
@@ -638,8 +644,8 @@ void PeleLM::ef_GMRES_solve(const Real      &dt,
 
       ef_JtV(dt, norm_pnp_U, pnp_U, b_in, x0, Ax);			// Apply JtV on x0, useless since x0 == 0, ...
       MultiFab::LinComb(r,1.0,Ax,0,-1.0,b_in,0,0,2,0);	// Build residual		
-      ef_applyPrecond(r,Ax);    
-      Real norm_r = ef_NL_norm(r);    							// Calc & store the initial residual
+      ef_applyPrecond(1000,r,Ax);    
+      Real norm_r = ef_NL_norm(Ax);  							// Calc & store the initial residual
 		if ( GMRES_restart == 0 ) {
 			beta = norm_r;
 			rel_tol = norm_r * ef_GMRES_reltol;
@@ -663,8 +669,7 @@ void PeleLM::ef_GMRES_solve(const Real      &dt,
 			amrex::Print() << " --> GMRES ite: " << k << "\n"; 
 
 			ef_JtV(dt, norm_pnp_U, pnp_U, b_in, KspBase[k],r);
-			ef_applyPrecond(r,KspBase[k+1]);       
-			MultiFab::Copy(KspBase[k+1],r, 0 ,0,  2, 0);
+			ef_applyPrecond(k,r,KspBase[k+1]);       
 			norm_vec = ef_NL_norm(KspBase[k+1]);
 //			amrex::Print() << " norm of KspBase k bef ortho : " << ef_NL_norm(KspBase[k]) << "\n";
 //   	   showMF("pnp",KspBase[k+1],"pnp_KspBase_befortho",level,k+1);
@@ -769,14 +774,14 @@ void PeleLM::ef_GMRES_solve(const Real      &dt,
    	showMF("pnp",x0,"pnp_x0_GMRES",level,GMRES_restart);
 
 		GMRES_restart += 1;
-//	   amrex::Abort("Because I want to !");
+	   amrex::Abort("End first GMRES restart !");
 
    } while( ! GMRES_converged && GMRES_restart < ef_max_GMRES_rst );
 
 	amrex::Print() << " Finished with GMRES \n";
 
 	KspBase.clear();
-	amrex::Abort("Because I want to !");
+	amrex::Abort("End of GMRES !");
 
 }
 
@@ -825,33 +830,274 @@ void PeleLM::ef_JtV(const Real      &dt,
 //	amrex::Abort("Because I want to !");
 }
 
-void PeleLM::ef_setUpPrecond (const Real   &dt,
-										MultiFab* De_ec[BL_SPACEDIM]) {
+void PeleLM::ef_setUpPrecond (const Real      &dt,
+										const MultiFab  &pnp_U,
+										MultiFab        *De_ec[BL_SPACEDIM]) {
 
-// Some LPInfo stuff	
-   LPInfo info;
-   info.setAgglomeration(1);
-   info.setConsolidation(1);
-   info.setMetricTerm(false);
+	static bool first_time = true;
 
-// Define all three LinOps	
-	pnp_pc_Stilda.define({geom}, {grids}, {dmap}, info);
-	pnp_pc_diff.define({geom}, {grids}, {dmap}, info);
-	pnp_pc_drift.define({geom}, {grids}, {dmap}, info);
-   pnp_pc_Stilda.setMaxOrder(ef_PoissonMaxOrder);
-   pnp_pc_diff.setMaxOrder(ef_PoissonMaxOrder);
-   pnp_pc_drift.setMaxOrder(ef_PoissonMaxOrder);
+   if ( first_time ) {		
+//    Some LPInfo stuff	
+      LPInfo info;
+      info.setAgglomeration(1);
+      info.setConsolidation(1);
+      info.setMetricTerm(false);
 
-// Coeff's	
-//   diff.setScalars(-1.0, -dt, dt); 
-//	std::array<const MultiFab*,AMREX_SPACEDIM> bcoeffs{D_DECL(De_ec[0],De_ec[1],De_ec[2])};
-//	diff.setBCoeffs(0, bcoeffs);
+//    Define all three LinOps	
+	   pnp_pc_Stilda.define({geom}, {grids}, {dmap}, info);
+	   pnp_pc_diff.define({geom}, {grids}, {dmap}, info);
+	   pnp_pc_drift.define({geom}, {grids}, {dmap}, info);
+      pnp_pc_Stilda.setMaxOrder(ef_PoissonMaxOrder);
+      pnp_pc_diff.setMaxOrder(ef_PoissonMaxOrder);
+      pnp_pc_drift.setMaxOrder(ef_PoissonMaxOrder);
+
+	   first_time = false;
+	}
+
+// Diff/Drift LinOp ( MLABecCecLaplacian )	
+   {
+//    Scalars includes the scaling of the Jacobian
+      pnp_pc_diff.setScalars(-pnp_SUne/pnp_SFne, -dt*pnp_SUne/pnp_SFne, dt*pnp_SUne/pnp_SFne); 
+//      pnp_pc_diff.setScalars(-pnp_SUne/pnp_SFne, -dt*pnp_SUne/pnp_SFne, 0.0); 
+//    Diagonal part	
+	   MultiFab dummy(grids,dmap,1,1);
+	   dummy.setVal(1.0);
+	   pnp_pc_diff.setACoeffs(0, dummy);
+//    Diffusion part	
+	   std::array<const MultiFab*,AMREX_SPACEDIM> bcoeffs{D_DECL(De_ec[0],De_ec[1],De_ec[2])};
+	   pnp_pc_diff.setBCoeffs(0, bcoeffs);
+//    Advection part
+	   std::array<const MultiFab*,AMREX_SPACEDIM> ccoeffs{D_DECL(&pnp_Ueff[0],&pnp_Ueff[1],&pnp_Ueff[2])};
+	   pnp_pc_diff.setCCoeffs(0, ccoeffs);
+//		pnp_pc_diff.checkDiagonalDominance(0,0);
+	}
+
+// Stilda and Drift LinOp
+// Start by getting the upwinded edge based nE*Kappa_e from cc.
+   {
+	   MultiFab nEtKappaE(grids,dmap,1,1);
+	   MultiFab::Copy(nEtKappaE, pnp_U, 0, 0, 1, 1);
+	   MultiFab::Multiply(nEtKappaE, kappaElec_cc, 0, 0, 1, 1);
+		MultiFab** neKe_ec = 0;
+      FluxBoxes edgeCoeff(this, 1, 1);
+      neKe_ec = edgeCoeff.get();
+      for (MFIter mfi(nEtKappaE); mfi.isValid(); ++mfi) {
+	      const Box& box = mfi.validbox();
+
+         for (int dir = 0; dir < BL_SPACEDIM; dir++) {
+            FPLoc bc_lo = fpi_phys_loc(get_desc_lst()[State_Type].getBC(nE).lo(dir));
+	    	   FPLoc bc_hi = fpi_phys_loc(get_desc_lst()[State_Type].getBC(nE).hi(dir));
+	    	   const Box& ebox = mfi.nodaltilebox(dir);
+	    	   center_to_edge_upwind_fancy((nEtKappaE)[mfi],(pnp_Ueff[dir])[mfi],(*neKe_ec[dir])[mfi],
+	   	                                amrex::grow(box,amrex::BASISV(dir)), ebox, 0, 
+	   	                                0, 1, geom.Domain(), bc_lo, bc_hi);
+				(*neKe_ec[dir])[mfi].mult(pnp_SUphiV/pnp_SFne*dt,ebox,0,1);
+         }
+      }
+      pnp_pc_drift.setScalars(0.0,-1.0); 
+		{
+	      std::array<const MultiFab*,AMREX_SPACEDIM> bcoeffs{D_DECL(neKe_ec[0],neKe_ec[1],neKe_ec[2])};
+	      pnp_pc_drift.setBCoeffs(0, bcoeffs);
+		}
+
+		Real scaling_Laplacian = 0.0;
+		FORT_GETSCALINGLAP(&scaling_Laplacian);
+
+      for (int dir = 0; dir < BL_SPACEDIM; dir++) {
+		   neKe_ec[dir]->mult(pnp_SUne/pnp_SFphiV);
+	   	neKe_ec[dir]->plus(scaling_Laplacian*pnp_SUphiV/pnp_SFphiV,0,1);
+      }
+      pnp_pc_Stilda.setScalars(0.0,-1.0); 
+		{
+	      std::array<const MultiFab*,AMREX_SPACEDIM> bcoeffs{D_DECL(neKe_ec[0],neKe_ec[1],neKe_ec[2])};
+	      pnp_pc_Stilda.setBCoeffs(0, bcoeffs);
+		}
+   }
+
 }
 
-void PeleLM::ef_applyPrecond ( const MultiFab &v,
+void PeleLM::ef_applyPrecond ( const int      &GMRES_ite,
+										 const MultiFab &v,
 										       MultiFab &Pv) {
-	MultiFab::Copy(Pv, v, 0, 0, 2, 1); 
+
+	MultiFab neComp_alias(v,amrex::make_alias,0,1);
+	MultiFab phiVComp_alias(v,amrex::make_alias,1,1);
+	MultiFab PneComp_alias(Pv,amrex::make_alias,0,1);
+	MultiFab PphiVComp_alias(Pv,amrex::make_alias,1,1);
+
+// Gather BC's for linear systems
+// TODO: no idea whether this is right or not ...	
+	std::array<LinOpBCType,AMREX_SPACEDIM> ne_lobc, ne_hibc;
+   std::array<LinOpBCType,AMREX_SPACEDIM> phiV_lobc, phiV_hibc;
+	ef_set_PCBC(phiV_lobc, phiV_hibc);
+	ef_set_PCBC(ne_lobc, ne_hibc);
+
+   pnp_pc_Stilda.setDomainBC(phiV_lobc, phiV_hibc);	
+   pnp_pc_diff.setDomainBC(ne_lobc, ne_hibc);	
+   pnp_pc_drift.setDomainBC(phiV_lobc, phiV_hibc);	
+
+	pnp_pc_diff.setLevelBC(0, &neComp_alias);
+	pnp_pc_drift.setLevelBC(0, &phiVComp_alias);
+	pnp_pc_Stilda.setLevelBC(0, &phiVComp_alias);
+
+	MLMG mg_diff(pnp_pc_diff);
+	MLMG mg_drift(pnp_pc_drift);
+	MLMG mg_Stilda(pnp_pc_Stilda);
+	mg_diff.setMaxFmgIter(20);
+	mg_drift.setMaxFmgIter(20);
+	mg_Stilda.setMaxFmgIter(20);
+	mg_diff.setMaxIter(ef_PoissonMaxIter);
+	mg_drift.setMaxIter(ef_PoissonMaxIter);
+	mg_Stilda.setMaxIter(ef_PoissonMaxIter);
+	mg_diff.setVerbose(ef_PoissonVerbose);
+	mg_drift.setVerbose(ef_PoissonVerbose);
+	mg_Stilda.setVerbose(ef_PoissonVerbose);
+
+// Set-up solver tolerances
+   Real S_tol     = ef_phiV_tol;
+   Real S_tol_abs = neComp_alias.norm0() * ef_phiV_tol;
+
+//     Most inner mat   
+//     --                --
+//     | [dtD-I]^-1     0 |
+//     |                  |  
+//     |       0        I |
+//     --                -- 
+	mg_diff.solve({&PneComp_alias}, {&neComp_alias}, S_tol, S_tol_abs);
+	MultiFab::Copy(Pv,v,1,1,1,1);
+	showMF("pnp",neComp_alias,"pnp_PC_neIn",level,GMRES_ite);
+	showMF("pnp",PneComp_alias,"pnp_PC_AftMat1",level,GMRES_ite);
+
+//     assembling mat
+//     --       --
+//     |  I    0 |
+//     |         |  
+//     | -Ie   I |
+//     --       --
+   MultiFab::Saxpy(PphiVComp_alias,-pnp_SUne/pnp_SFphiV,PneComp_alias,0,0,1,1); 
+	showMF("pnp",PphiVComp_alias,"pnp_PC_AftMat2",level,GMRES_ite);
+
+//     phiV estimate mat   
+//     --         --
+//     | I     0   |
+//     |           |  
+//     | 0   S*^-1 |
+//     --         -- 
+   MultiFab temp(grids,dmap,1,1);
+   S_tol_abs = PphiVComp_alias.norm0() * ef_phiV_tol;     
+	mg_Stilda.solve({&temp},{&PphiVComp_alias}, S_tol, S_tol_abs);
+	MultiFab::Copy(PphiVComp_alias, temp, 0, 0, 1, 1);
+	showMF("pnp",PphiVComp_alias,"pnp_PC_AftMat3",level,GMRES_ite);
+	temp.setVal(0.0);
+
+//     Final mat   
+//     --                          --
+//     | I       -[dtD - I]^-1 dtDr |
+//     |                            |  
+//     | 0                I         |
+//     --                          --
+   mg_drift.apply({&temp},{&PphiVComp_alias});
+	S_tol_abs = temp.norm0() * ef_phiV_tol;
+	mg_diff.solve({&temp},{&temp}, S_tol, S_tol_abs);
+	showMF("pnp",temp,"pnp_PC_AftMat4",level,GMRES_ite);
+	temp.mult(-1.0);
+	MultiFab::Add(PneComp_alias,temp,0,0,1,1);
+
+
+//	amrex::Abort("In applyPrecond !");
 }
+
+void
+PeleLM::center_to_edge_upwind_fancy (const FArrayBox& cfab,
+                                     const FArrayBox& velefab,
+                                     FArrayBox&       efab,
+                                     const Box&       ccBox,
+                                     const Box&       ebox,
+                                     int              sComp,
+                                     int              dComp,
+                                     int              nComp,
+                                     const Box&       domain,
+                                     const FPLoc&     bc_lo,
+                                     const FPLoc&     bc_hi)
+{
+  //const Box&      ebox = efab.box();
+  const IndexType ixt  = ebox.ixType();
+
+  BL_ASSERT(!(ixt.cellCentered()) && !(ixt.nodeCentered()));
+
+  int dir = -1;
+  for (int d = 0; d < BL_SPACEDIM; d++)
+    if (ixt.test(d))
+      dir = d;
+
+  BL_ASSERT(amrex::grow(ccBox,-amrex::BASISV(dir)).contains(amrex::enclosedCells(ebox)));
+  BL_ASSERT(sComp+nComp <= cfab.nComp() && dComp+nComp <= efab.nComp());
+  //
+  // Exclude unnecessary cc->ec calcs
+  //
+  Box ccVBox = ccBox;
+  if (bc_lo!=HT_Center)
+    ccVBox.setSmall(dir,std::max(domain.smallEnd(dir),ccVBox.smallEnd(dir)));
+  if (bc_hi!=HT_Center)
+    ccVBox.setBig(dir,std::min(domain.bigEnd(dir),ccVBox.bigEnd(dir)));
+  //
+  // Shift cell-centered data to edges
+  //
+  const int isharm = def_harm_avg_cen2edge?1:0;
+  cen2edgup(ebox.loVect(),ebox.hiVect(),
+            ARLIM(cfab.loVect()),ARLIM(cfab.hiVect()),cfab.dataPtr(sComp),
+            ARLIM(velefab.loVect()),ARLIM(velefab.hiVect()),velefab.dataPtr(0),
+            ARLIM(efab.loVect()),ARLIM(efab.hiVect()),efab.dataPtr(dComp),
+            &nComp, &dir, &isharm);
+  //
+  // Fix boundary...i.e. fill-patched data in cfab REALLY lives on edges
+  //
+  if ( !(domain.contains(ccBox)) )
+  {
+    if (bc_lo==HT_Edge)
+    {
+      BoxList gCells = amrex::boxDiff(ccBox,domain);
+      if (gCells.ok())
+      {
+        const int inc = +1;
+        FArrayBox ovlpFab;
+        for (BoxList::const_iterator bli = gCells.begin(), end = gCells.end();
+             bli != end;
+             ++bli)
+        {
+          if (bc_lo == HT_Edge)
+          {
+            ovlpFab.resize(*bli,nComp);
+            ovlpFab.copy(cfab,sComp,0,nComp);
+            ovlpFab.shiftHalf(dir,inc);
+            efab.copy(ovlpFab,0,dComp,nComp);
+          }
+        }
+      }
+    }
+    if (bc_hi==HT_Edge)
+    {
+      BoxList gCells = amrex::boxDiff(ccBox,domain);
+      if (gCells.ok())
+      {
+        const int inc = -1;
+        FArrayBox ovlpFab;
+        for (BoxList::const_iterator bli = gCells.begin(), end = gCells.end();
+             bli != end;
+             ++bli)
+        {
+          if (bc_hi == HT_Edge)
+          {
+            ovlpFab.resize(*bli,nComp);
+            ovlpFab.copy(cfab,sComp,0,nComp);
+            ovlpFab.shiftHalf(dir,inc);
+            efab.copy(ovlpFab,0,dComp,nComp);
+          }
+        }
+      }
+    }
+  }
+}    
 
 // Setup BC conditions for diffusion operator on nE. Directly copied from the diffusion one ...
 void PeleLM::ef_set_neBC(std::array<LinOpBCType,AMREX_SPACEDIM> &diff_lobc,
@@ -964,5 +1210,21 @@ void PeleLM::ef_set_PoissonBC(std::array<LinOpBCType,AMREX_SPACEDIM> &mlmg_lobc,
                 mlmg_hibc[idim] = LinOpBCType::bogus;
             }
         }
+    }
+}
+
+void PeleLM::ef_set_PCBC(std::array<LinOpBCType,AMREX_SPACEDIM> &diff_lobc,
+                         std::array<LinOpBCType,AMREX_SPACEDIM> &diff_hibc) {
+
+    for (int idim = 0; idim < AMREX_SPACEDIM; ++idim)
+    {
+        if (Geometry::isPeriodic(idim))
+        {
+            diff_lobc[idim] = diff_hibc[idim] = LinOpBCType::Periodic;
+        }
+        else
+        {
+			   diff_lobc[idim] = diff_hibc[idim] = LinOpBCType::Neumann;
+		  }
     }
 }

@@ -71,13 +71,14 @@
 	void ef_NL_residual(const amrex::Real        &dt,
 							  const amrex::MultiFab    &pnp_U,
 							        amrex::MultiFab    &pnp_res,
-							  bool update_scaling = false);
+							        bool update_scaling = false,
+							        bool update_PC = false);
 
 // Test PNP NL residual function
 	void ef_NL_residual_test(const amrex::Real       &dt,
 							       const amrex::MultiFab   &pnp_U,
 							             amrex::MultiFab   &pnp_res,
-							       bool update_scaling = false);
+							             bool update_scaling = false);
 
 
 // GMRES solve function
@@ -96,11 +97,13 @@
 				         amrex::MultiFab  &JtV);
 
 // Preconditioner set-up function. Called once per newton ite. TODO: maybe less ?
-   void ef_setUpPrecond(const amrex::Real         &dt,
-							         amrex::MultiFab**   De_ec); 
+   void ef_setUpPrecond(const amrex::Real      &dt,
+								const amrex::MultiFab  &pnp_U,
+							         amrex::MultiFab  **De_ec); 
 
 // Apply the preconditioner to any vector v.
-   void ef_applyPrecond(const amrex::MultiFab  &v,
+   void ef_applyPrecond(const int				  &GMRES_ite,
+								const amrex::MultiFab  &v,
 								      amrex::MultiFab  &Pv); 	
 
 // Residual norm
@@ -144,6 +147,19 @@
 											         amrex::MultiFab** phiV_fluxes,
 												      amrex::MultiFab   &phiV_laplacian_term);
 
+// Similar to center_to_edge_fancy but upwinded
+   static void center_to_edge_upwind_fancy (const amrex::FArrayBox& cfab,
+                                            const amrex::FArrayBox& velefab,
+                                            amrex::FArrayBox&       efab,
+                                            const amrex::Box&       ccBox,
+                                            const amrex::Box&       eBox,
+                                            int              sComp,
+                                            int              dComp,
+                                            int              nComp,
+                                            const amrex::Box&       domain,
+                                            const FPLoc&     bc_lo,
+                                            const FPLoc&     bc_hi);
+
 // Setup ne BC for diffusion operator
    void ef_set_neBC(std::array<amrex::LinOpBCType,AMREX_SPACEDIM> &diff_lobc,
                     std::array<amrex::LinOpBCType,AMREX_SPACEDIM> &diff_hibc);
@@ -151,5 +167,9 @@
 // Setup PhiV BC for linear Poisson solve
    void ef_set_PoissonBC(std::array<amrex::LinOpBCType,AMREX_SPACEDIM> &mlmg_lobc,
                          std::array<amrex::LinOpBCType,AMREX_SPACEDIM> &mlmg_hibc);
+
+// Setup BC for Precond: all Neumann or Perio
+   void ef_set_PCBC(std::array<amrex::LinOpBCType,AMREX_SPACEDIM> &mlmg_lobc,
+                    std::array<amrex::LinOpBCType,AMREX_SPACEDIM> &mlmg_hibc);
 
 #endif /*_Efield_H_*/
