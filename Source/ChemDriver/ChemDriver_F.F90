@@ -35,7 +35,7 @@ module chem_driver
             GETCKNUMELT, get_CK_num_reac, RUNIV, P1ATMMKS, GETCKELTNAME, &
             GETCKSPECNAME,CKSYMR,get_spec_name,get_spec_number,get_CKMWT, &
             FORT_GETCKAWT,conpFY,conpJY,conpFY_sdc,TfromeYpt,TfromHYpt, &
-            FORT_GETCKCHRG,open_vode_failure_file
+            FORT_GETCKCHRG,FORT_GETSCALINGLAP,open_vode_failure_file
 
 contains
 
@@ -745,6 +745,18 @@ contains
      call CKCHRG(IWRK(ckbi),RWRK(ckbr),chrg)
 
   end subroutine FORT_GETCKCHRG
+
+  subroutine FORT_GETSCALINGLAP(scaling)bind(C, name="FORT_GETSCALINGLAP")
+
+     USE mod_chemdriver_defs, ONLY : e0, er, CperECharge
+
+     implicit none
+
+     REAL_T scaling
+
+     scaling = e0*er/CperECharge
+
+  end subroutine FORT_GETSCALINGLAP
 #endif      
 
 !------------------------------------  
