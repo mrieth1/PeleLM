@@ -20,21 +20,13 @@ def multiRun(test_name,inputFile):
         if ( f.startswith("PeleLM") and f.endswith(".ex")):
                executable = f
 
-    # Loop on /= resolutions, run & prepare fcompare input
-    resolution = [32,64,128]        
+    # Loop on /= resolutions, run 
+    resolution = [64,128,256,512,1024,2048]        
     for case in resolution:
         outfile = "{}_{}.run.out".format(test_name,case)
         runtime_params = "amr.n_cell={} {} {} ".format(case,case,case)
         runtime_params += "amr.plot_file={}_plt_{}_".format(test_name,case)
-#        os.system("mpiexec -n 1 ./{} {} {} > {}".format(executable, inputFile,runtime_params, outfile))
-        pltfile=[]
-        for f in os.listdir(run_dir):
-            if (f.startswith("{}_plt_{}_".format(test_name,case))):
-                pltfile.append(f)
-        pltfile.sort()        
-        f = open("fcompare_params_{}".format(case),"w")
-        f.write(" -n 2 {} {}".format(pltfile[0], pltfile[-1]))
-        f.close()
+        os.system("mpiexec -n 4 ./{} {} {} > {}".format(executable, inputFile,runtime_params, outfile))
 
 
 if __name__ == "__main__":

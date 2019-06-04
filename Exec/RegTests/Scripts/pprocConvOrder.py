@@ -3,52 +3,103 @@
 # Post-processing script for convergence analysis
 # Must be used after multirun.py script
 # Usage:
-#   ./pprocConvOrder.py fcompare_exec
+#   ./pprocConvOrder.py pproc_exec pproc_type
+
+#   with pproc_exec the processing executable path:
+#   - fcompare if pproc_type == 0. Analytical solution is known  
+#   - diffsamedomain if pproc_type == 1. Analytical solution is not known and errors
+#     are computed from the next finer grid  
 
 
 import sys
 import os
+import fnmatch
 import shutil
 import numpy as np
 
 import matplotlib
 import matplotlib.pyplot as plt
 
-def pproc(fcompare_exe):
+def pproc(pproc_exe, pproc_type):
 
     # User data
-    vars=["x_velocity", "y_velocity", "avg_pressure"]
-    resolution = [32,64,128]        
+    vars=["Y(CO2)", "y_velocity", "density", "Y(O2)", "Y(CH4)" ]
+    resolution = [64,128,256,512,1024]        
 
-    # Get a local copy of fcompare
+    # Get a local copy of post-processing executable
     run_dir = os.getcwd()
-#    shutil.copy(fcompare_exe, run_dir)
+    if ( not os.path.isfile(os.path.basename(pproc_exe)) ):
+        shutil.copy(pproc_exe, run_dir)
     test_name = run_dir.split("/")[-1]
+    test_name = "CONVFLAME"
 
-    # Run fcompare on each resolution
-    errors = np.empty([len(resolution),len(vars)+1])
-    for res in range(len(resolution)):
-        case = resolution[res]
-        errors[res,0] = case
-        outfile = "error_{}.analysis.out".format(case)
-        args_file = "fcompare_params_{}".format(case)
-        f = open(args_file, "r")
-        fcomp_args = f.read()
-        f.close()
-#        os.system("rm {}".format(args_file)) 
-        os.system("./{} {} > {}".format(os.path.basename(fcompare_exe), fcomp_args.split("\n")[0], outfile))
+    # Run the postprocessing
+    if ( pproc_type == "0" ):     # running fcompare since analytical solution is known
+        errors = np.empty([len(resolution),len(vars)+1])
+        pltfile=[]
+        for res in range(len(resolution)):
+            case = resolution[res]
+            errors[res,0] = case
 
-        # Extract errors on each variable
-        with open(outfile) as fp:
-            for i, line in enumerate(fp):
-                if (i >= 5):
-                    var = line.split()[0]
-                    for v in range(len(vars)):
-                        if ( var == vars[v] ):
-                            errors[res,v+1] = line.split()[1]
-        # Dump data in file                                
-        os.system("rm {}".format(outfile))
+            # Get the fcompare inputs: first and last solution of current case
+            # TODO: the analytical solution might not be plt****_00000 ...
+            for f in os.listdir(run_dir):
+                if ( not fnmatch.fnmatch(f, '*old*')):
+                    if (f.startswith("{}_plt_{}_".format(test_name,case))):
+                        pltfile.append(f)
+            pltfile.sort()
+            outfile = "error_{}.analysis.out".format(case)
+            os.system("./{} -n 2 {} {} > {}".format(os.path.basename(pproc_exe), pltfile[0], pltfile[-1], outfile))
+            pltfile.clear()
+        
+            # Extract errors on each variable
+            with open(outfile) as fp:
+                for i, line in enumerate(fp):
+                    if (i >= 5):
+                        var = line.split()[0]
+                        for v in range(len(vars)):
+                            if ( var == vars[v] ):
+                                errors[res,v+1] = line.split()[1]
+            os.system("rm {}".format(outfile))
+    elif ( pproc_type == "1" ):   # running diffsamedomain. No analytical sol ...
+        errors = np.empty([len(resolution)-1,len(vars)+1])
+        pltfile=[]
+        pltfilenext=[]
+        for res in range(len(resolution)-1):
+            case = resolution[res]
+            nextcase = resolution[res+1]
+            errors[res,0] = case
 
+            # Get the diffsamedomain inputs: last solutions of current 
+            # and next finer cases. These run should have been runned to the same final time
+            for f in os.listdir(run_dir):
+                if ( not fnmatch.fnmatch(f, '*old*')):
+                    if (f.startswith("{}_plt_{}_".format(test_name,case))):
+                        pltfile.append(f)
+                    if (f.startswith("{}_plt_{}_".format(test_name,nextcase))):
+                        pltfilenext.append(f)
+            pltfile.sort()
+            pltfilenext.sort()
+            outfile = "error_{}.analysis.out".format(case)
+            os.system("./{} infile1={} reffile={} > {}".format(os.path.basename(pproc_exe), pltfile[-1], pltfilenext[-1], outfile))
+            pltfile.clear()
+            pltfilenext.clear()
+
+            # Extract errors on each variable
+            with open(outfile) as fp:
+                for i, line in enumerate(fp):
+                    if (i >= 5):
+                        var = line.split(":")[0]
+                        for v in range(len(vars)):
+                            if ( var.split(" ")[0] == vars[v] ):
+                                errors[res,v+1] = line.split(":")[1]
+            os.system("rm {}".format(outfile))
+    else:
+        print("Wrong pproc_type: {}. should be either 0 or 1".format(pproc_type))
+        return
+
+
+    print(errors)
     # Plot data
     plotdata(errors, test_name, vars)
     writetex(errors, test_name, vars)
@@ -67,7 +118,7 @@ def plotdata(data, test_name, vars):
     plt.yscale("log")
     plt.grid(which='both',color='k', linestyle=':', linewidth=1)
     plt.legend(bbox_to_anchor=(0.9, 0.9), loc=1, borderaxespad=0.)
-    plt.savefig("CoVo_Convergence_{}.png".format(test_name))
+    plt.savefig("Convergence_{}.png".format(test_name))
 
 def writetex(data, test_name, vars):
     # Evaluate order
@@ -100,5 +151,6 @@ def writetex(data, test_name, vars):
 
 
 if __name__ == "__main__":
-    fcompare_exe = str(sys.argv[1])
-    pproc(fcompare_exe)
+    pproc_exe = str(sys.argv[1])
+    pproc_type = str(sys.argv[2])
+    pproc(pproc_exe, pproc_type)
