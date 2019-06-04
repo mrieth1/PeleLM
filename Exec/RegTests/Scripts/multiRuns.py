@@ -21,7 +21,7 @@ def multiRun(test_name,inputFile):
                executable = f
 
     # Loop on /= resolutions, run 
-    resolution = [64,128,256,512,1024,2048]        
+    resolution = [64,128,256,512]        
     for case in resolution:
         outfile = "{}_{}.run.out".format(test_name,case)
         runtime_params = "amr.n_cell={} {} {} ".format(case,case,case)

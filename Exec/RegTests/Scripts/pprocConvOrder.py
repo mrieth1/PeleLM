@@ -24,14 +24,13 @@ def pproc(pproc_exe, pproc_type):
 
     # User data
     vars=["Y(CO2)", "y_velocity", "density", "Y(O2)", "Y(CH4)" ]
-    resolution = [64,128,256,512,1024]        
+    resolution = [64,128,256,512]        
 
     # Get a local copy of post-processing executable
     run_dir = os.getcwd()
     if ( not os.path.isfile(os.path.basename(pproc_exe)) ):
         shutil.copy(pproc_exe, run_dir)
     test_name = run_dir.split("/")[-1]
-    test_name = "CONVFLAME"
 
     # Run the postprocessing
     if ( pproc_type == "0" ):     # running fcompare since analytical solution is known
