@@ -39,8 +39,8 @@ DEFINES+=-DALWAYS_NEW_J
 #Chemistry_Model = DRM19
 #fEXE_sources += drm19Soln_seed_0.50.f
 
-Chemistry_Model = LIDRYER
-fEXE_sources += LiDryer_040_01ATM.f
+#Chemistry_Model = LIDRYER
+#fEXE_sources += LiDryer_040_01ATM.f
 
 #Chemistry_Model = LUDME
 #fEXE_sources += LuDME_0700.f
@@ -48,8 +48,8 @@ fEXE_sources += LiDryer_040_01ATM.f
 #Chemistry_Model = GRI30
 #fEXE_sources += gri30_070.f
 
-#Chemistry_Model = CH4-2step
-#fEXE_sources += 2stepSoln0.8.f
+Chemistry_Model = CH4-2step
+fEXE_sources += 2stepSoln0.8.f
 
 Blocs   := .
 
