@@ -12,4 +12,7 @@ The CoVo case is a classical test case for computational fluid dynamics solvers.
 Current implementation
 ----------------------
 
-
+In the present implementation, the vortex position, size and strength are controlled in the probin file using the following keywords:
+ * Position: xvort, yvort (in m)
+ * Characteristic size: rvort (in m)
+ * Strength: forcevort (
