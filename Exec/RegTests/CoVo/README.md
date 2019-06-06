@@ -13,6 +13,10 @@ Current implementation
 ----------------------
 
 In the present implementation, the vortex position, size and strength are controlled in the probin file using the following keywords:
- * Position: xvort, yvort (in m)
- * Characteristic size: rvort (in m)
- * Strength: forcevort (
+ * Position: '<xvort>', '<yvort>' [m]
+ * Characteristic size: rvort [m]
+ * Strength: forcevort 
+
+Additionally, the underlying uniform velocity magnitude and direction can be adjusted from the probin file using:
+ * Velocity magnitude: meanFlowMag [m/s]
+ * Streamwise direction: (-)1 -> (-)X, (-)2 -> (-)Y, (-)3 -> (-)45 angle between X/Y 
