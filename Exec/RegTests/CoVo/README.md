@@ -13,7 +13,7 @@ Current implementation
 ----------------------
 
 In the present implementation, the vortex position, size and strength are controlled in the probin file using the following keywords:
- * Position: '<xvort>', '<yvort>' [m]
+ * Position: `xvort`, `yvort` [m]
  * Characteristic size: rvort [m]
  * Strength: forcevort 
 
