@@ -1,6 +1,12 @@
-[submodule "IAMR"]
-	branch = diffuse_scalar_rearrangement_cgilet
-[submodule "amrex"]
+[submodule "Submodules/amrex"]
+	path = Submodules/amrex
+	url = https://github.com/AMReX-Codes/amrex.git
 	branch = development
-[submodule "PelePhysics"]
+[submodule "Submodules/IAMR"]
+	path = Submodules/IAMR
+	url = https://github.com/AMReX-Codes/IAMR.git
+	branch = diffuse_scalar_rearrangement_cgilet
+[submodule "Submodules/PelePhysics"]
+	path = Submodules/PelePhysics
+	url = https://github.com/AMReX-Combustion/PelePhysics.git
 	branch = master
