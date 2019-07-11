@@ -1,0 +1,12 @@
+ &fortin
+  T_in = 470.0
+  T_co = 900.0
+  V_in = 28.0
+  blobr   = .0002
+ /
+ &heattransin
+  pamb = 6079500.0d0
+  closed_chamber = 1
+  dpdt_factor = 1.0d0
+ /
+
