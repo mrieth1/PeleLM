@@ -44,8 +44,6 @@ contains
       use mod_Fvar_def, only : pamb, dpdt_factor, closed_chamber
       use mod_Fvar_def, only : dim
       use probdata_module, only: T_in, T_co, V_in, blobr
-      use extern_probin_module, only: Prandtl_number, viscosity_mu_ref, viscosity_T_ref, viscosity_S,&
-         const_bulk_viscosity, const_diffusivity
       
       implicit none
       integer init, namlen
@@ -55,8 +53,7 @@ contains
 
       integer i
  
-      namelist /fortin/ Prandtl_number, viscosity_mu_ref, viscosity_T_ref, viscosity_S,&
-         const_bulk_viscosity, const_diffusivity, T_in, T_co, V_in, blobr
+      namelist /fortin/ T_in, T_co, V_in, blobr
 
       namelist /heattransin/ pamb, dpdt_factor, closed_chamber
 
@@ -94,14 +91,6 @@ contains
       pamb = pphys_getP1atm_MKS()
       dpdt_factor = 0.3d0
       closed_chamber = 0
-
-      Prandtl_number = 0.71d0
-      viscosity_mu_ref = 1.68d-5
-      viscosity_T_ref = 273.0d0
-      viscosity_S = 110.5d0
-      const_bulk_viscosity = 0.0d0
-      const_diffusivity = 0.0d0
-
 
       T_in  = 470.d0
       T_co  = 900.0d0
